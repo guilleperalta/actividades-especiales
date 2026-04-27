@@ -1,0 +1,240 @@
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useActivityConfig } from "./hooks/useActivityConfig";
+import { ControlPanel } from "./components/ControlPanel";
+import { ActivitySheet } from "./components/ActivitySheet";
+
+export default function App() {
+    const sheetRef = useRef(null);
+    const previewRef = useRef(null);
+    const exportSheetRef = useRef(null);
+    const [zoom, setZoom] = useState(70);
+    const { activities, config, activeActivityIndex, setActiveActivityIndex, update, updateOperation, updateOperand, addActivity, removeActivity, isAddSub, isMultDiv, activeOperandCount, getOperandCount, layout, setLayout, moveActivity } = useActivityConfig();
+
+    const PREVIEW_VERTICAL_PADDING = 20;
+
+    const fitToHeight = () => {
+        if (!previewRef.current) return;
+        const availableHeight = previewRef.current.clientHeight - PREVIEW_VERTICAL_PADDING * 2 - 6;
+        const currentScale = Math.max(0.4, zoom / 100);
+        const measuredSheetHeight = sheetRef.current?.getBoundingClientRect().height ?? 0;
+        const baseSheetHeight = measuredSheetHeight > 0 ? measuredSheetHeight / currentScale : 1122;
+        const fitZoom = Math.max(40, Math.min(180, Math.floor((availableHeight / baseSheetHeight) * 100)));
+        setZoom(fitZoom);
+    };
+
+    useEffect(() => {
+        fitToHeight();
+        window.addEventListener("resize", fitToHeight);
+        return () => window.removeEventListener("resize", fitToHeight);
+    }, []);
+
+    const buildPrintDocument = () => {
+        const stylesheetMarkup = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+            .map((node) => node.outerHTML)
+            .join("");
+        const sheetMarkup = exportSheetRef.current?.outerHTML ?? "";
+
+        return `
+            <!doctype html>
+            <html lang="es">
+                <head>
+                    <meta charset="utf-8" />
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                    <title>Impresión de actividades</title>
+                    ${stylesheetMarkup}
+                    <style>
+                        html, body {
+                            margin: 0;
+                            padding: 0;
+                            width: 210mm;
+                            min-height: 297mm;
+                            background: #ffffff;
+                            overflow: hidden;
+                        }
+
+                        body {
+                            display: flex;
+                            justify-content: center;
+                            align-items: flex-start;
+                        }
+
+                        .sheet-preview-shell {
+                            padding: 0 !important;
+                            margin: 0 !important;
+                        }
+
+                        .sheet-a4 {
+                            width: 210mm !important;
+                            min-height: 297mm !important;
+                            border-radius: 0 !important;
+                            box-shadow: none !important;
+                            overflow: hidden !important;
+                        }
+
+                        @page {
+                            size: A4 portrait;
+                            margin: 0;
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${sheetMarkup}
+                </body>
+            </html>
+        `;
+    };
+
+    const handlePrint = async () => {
+        if (!exportSheetRef.current) return;
+
+        const printWindow = window.open("", "_blank", "width=1200,height=900");
+        if (!printWindow) {
+            alert("El navegador bloqueó la ventana de impresión.");
+            return;
+        }
+
+        printWindow.document.open();
+        printWindow.document.write(buildPrintDocument());
+        printWindow.document.close();
+
+        let hasPrinted = false;
+        const triggerPrint = async () => {
+            if (hasPrinted) {
+                return;
+            }
+            hasPrinted = true;
+
+            if (printWindow.document.fonts?.ready) {
+                await printWindow.document.fonts.ready;
+            }
+
+            printWindow.focus();
+            window.setTimeout(() => {
+                printWindow.print();
+                window.setTimeout(() => {
+                    printWindow.close();
+                }, 250);
+            }, 180);
+        };
+
+        printWindow.onload = () => {
+            void triggerPrint();
+        };
+        window.setTimeout(() => {
+            void triggerPrint();
+        }, 350);
+    };
+
+    const handleExport = async () => {
+        if (!exportSheetRef.current) return;
+        let exportHost = null;
+        try {
+            if (document.fonts?.ready) {
+                await document.fonts.ready;
+            }
+
+            const waitForImages = async (rootElement) => {
+                const images = Array.from(rootElement.querySelectorAll("img"));
+                await Promise.all(
+                    images.map((image) => {
+                        if (image.complete) {
+                            return Promise.resolve();
+                        }
+
+                        return new Promise((resolve) => {
+                            image.onload = () => resolve();
+                            image.onerror = () => resolve();
+                        });
+                    }),
+                );
+            };
+
+            exportHost = document.createElement("div");
+            exportHost.style.position = "fixed";
+            exportHost.style.left = "0";
+            exportHost.style.top = "0";
+            exportHost.style.width = "210mm";
+            exportHost.style.minHeight = "297mm";
+            exportHost.style.padding = "0";
+            exportHost.style.margin = "0";
+            exportHost.style.background = "#ffffff";
+            exportHost.style.zIndex = "-1";
+            exportHost.style.pointerEvents = "none";
+
+            const exportClone = exportSheetRef.current.cloneNode(true);
+            exportHost.appendChild(exportClone);
+            document.body.appendChild(exportHost);
+
+            await waitForImages(exportHost);
+
+            const { default: html2canvas } = await import("html2canvas");
+            const canvas = await html2canvas(exportClone, {
+                scale: 3,
+                useCORS: true,
+                foreignObjectRendering: false,
+                backgroundColor: "#ffffff",
+                logging: false,
+                width: exportClone.scrollWidth,
+                height: exportClone.scrollHeight,
+                windowWidth: exportClone.scrollWidth,
+                windowHeight: exportClone.scrollHeight,
+                onclone: (clonedDocument) => {
+                    const clonedSheet = clonedDocument.querySelector(".sheet-a4");
+                    if (clonedSheet) {
+                        clonedSheet.style.boxShadow = "none";
+                        clonedSheet.style.transform = "none";
+                    }
+
+                    clonedDocument.querySelectorAll(".dot").forEach((dot) => {
+                        dot.style.backgroundColor = "#d0d0d0";
+                        dot.style.borderColor = "#d0d0d0";
+                    });
+                },
+            });
+            document.body.removeChild(exportHost);
+            exportHost = null;
+            const a = document.createElement("a");
+            a.download = `actividades-${activities.length}.png`;
+            a.href = canvas.toDataURL("image/png");
+            a.click();
+        } catch {
+            alert('No se pudo exportar. Usá "Imprimir" y guardá como PDF.');
+        } finally {
+            if (exportHost?.parentNode) {
+                exportHost.parentNode.removeChild(exportHost);
+            }
+        }
+    };
+
+    return (
+        <div className="app-layout flex h-screen overflow-hidden bg-slate-950">
+            <div className="flex-[0_0_33.333%] max-w-[33.333%] min-w-[320px] h-full">
+                <ControlPanel activities={activities} config={config} activeActivityIndex={activeActivityIndex} onSelectActivity={setActiveActivityIndex} onAddActivity={addActivity} onRemoveActivity={removeActivity} onMoveActivity={moveActivity} layout={layout} onLayoutChange={setLayout} update={update} updateOperation={updateOperation} updateOperand={updateOperand} isAddSub={isAddSub} isMultDiv={isMultDiv} activeOperandCount={activeOperandCount} onPrint={handlePrint} onExport={handleExport} zoom={zoom} onZoomChange={setZoom} onFitHeight={fitToHeight} />
+            </div>
+            <main ref={previewRef} className="app-preview flex-1 overflow-auto flex items-center justify-center py-3 px-6 bg-[radial-gradient(circle_at_top,_rgba(236,72,153,0.16),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#111827_100%)]">
+                <div className="preview-stage flex items-center justify-center w-full min-h-full">
+                    <div
+                        className="preview-zoom-wrap"
+                        style={{
+                            zoom: `${zoom}%`,
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            width: "fit-content",
+                        }}
+                    >
+                        <ActivitySheet ref={sheetRef} activities={activities} getOperandCount={getOperandCount} layout={layout} />
+                    </div>
+                </div>
+            </main>
+
+            {createPortal(
+                <div className="export-sheet-host" aria-hidden="true">
+                    <ActivitySheet ref={exportSheetRef} activities={activities} getOperandCount={getOperandCount} layout={layout} />
+                </div>,
+                document.body,
+            )}
+        </div>
+    );
+}

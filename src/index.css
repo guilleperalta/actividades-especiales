@@ -1,0 +1,159 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    html {
+        font-size: 62.5%; /* 1rem = 10px */
+    }
+    body {
+        font-family: "Nunito", sans-serif;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
+@layer components {
+    .dot {
+        border-radius: 9999px;
+        background-color: #d0d0d0;
+        border: 0.08rem solid #d0d0d0;
+        display: block;
+        flex-shrink: 0;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .export-sheet-host {
+        position: fixed;
+        top: 0;
+        left: -100000px;
+        pointer-events: none;
+        z-index: -1;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        background: white;
+        overflow: hidden;
+        width: 210mm;
+        min-height: 297mm;
+    }
+}
+
+html,
+.control-panel-scroll,
+.app-preview,
+.svg-picker-scroll,
+.table-grid-scroll {
+    scrollbar-color: #ec4899 #0f172a;
+}
+
+.control-panel-scroll::-webkit-scrollbar,
+.app-preview::-webkit-scrollbar,
+.svg-picker-scroll::-webkit-scrollbar,
+.table-grid-scroll::-webkit-scrollbar {
+    width: 1.1rem;
+    height: 1.1rem;
+}
+
+.control-panel-scroll::-webkit-scrollbar-track,
+.svg-picker-scroll::-webkit-scrollbar-track {
+    background: #0f172a;
+}
+
+.app-preview::-webkit-scrollbar-track,
+.table-grid-scroll::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.55);
+}
+
+.control-panel-scroll::-webkit-scrollbar-thumb,
+.app-preview::-webkit-scrollbar-thumb,
+.svg-picker-scroll::-webkit-scrollbar-thumb,
+.table-grid-scroll::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #ec4899 0%, #be185d 100%);
+    border-radius: 9999px;
+    border: 0.2rem solid #0f172a;
+}
+
+.app-preview::-webkit-scrollbar-thumb,
+.table-grid-scroll::-webkit-scrollbar-thumb {
+    border-color: rgba(15, 23, 42, 0.55);
+}
+
+.control-panel-scroll::-webkit-scrollbar-thumb:hover,
+.app-preview::-webkit-scrollbar-thumb:hover,
+.svg-picker-scroll::-webkit-scrollbar-thumb:hover,
+.table-grid-scroll::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #f472b6 0%, #db2777 100%);
+}
+
+@media print {
+    html,
+    body {
+        width: 210mm !important;
+        height: 297mm !important;
+        overflow: hidden !important;
+        background: white !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .no-print {
+        display: none !important;
+    }
+
+    .app-layout {
+        display: block !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        overflow: hidden !important;
+    }
+
+    .app-preview {
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        background: white !important;
+        display: block !important;
+        overflow: hidden !important;
+    }
+
+    .preview-stage,
+    .preview-zoom-wrap,
+    .sheet-preview-shell {
+        min-height: 0 !important;
+        height: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .preview-zoom-wrap {
+        zoom: 100% !important;
+        width: 210mm !important;
+        justify-content: center !important;
+        align-items: flex-start !important;
+    }
+
+    .sheet-a4 {
+        box-shadow: none !important;
+        width: 210mm !important;
+        min-height: 297mm !important;
+        height: 297mm !important;
+        border-radius: 0 !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        overflow: hidden !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .export-sheet-host {
+        display: none !important;
+    }
+
+    @page {
+        size: A4 portrait;
+        margin: 0;
+    }
+}
