@@ -11,10 +11,6 @@ const OPERATION_ICONS = {
     division: "÷",
 };
 
-/**
- * ControlPanel
- * Sidebar with the main Math activity settings.
- */
 export function ControlPanel({
     config,
     activities,
@@ -23,8 +19,6 @@ export function ControlPanel({
     onAddActivity,
     onRemoveActivity,
     onMoveActivity,
-    layout,
-    onLayoutChange,
     update,
     updateOperation,
     updateOperand,
@@ -47,12 +41,6 @@ export function ControlPanel({
     const refreshSavedSvgItems = () => {
         setSavedSvgItems(loadSavedSvgItems());
     };
-
-    const layoutOptions = [
-        { value: "vertical", label: "Vertical" },
-        { value: "horizontal", label: "Horizontal" },
-        { value: "grid", label: "Cuadrícula" },
-    ];
 
     const handleIconSelect = (iconReference) => {
         if (!pickerTarget) {
@@ -128,16 +116,6 @@ export function ControlPanel({
                         ))}
                     </div>
 
-                    <div className="flex items-center gap-3">
-                        <span className="text-[1.35rem] text-slate-400">Distribución:</span>
-                        <select value={layout} onChange={(event) => onLayoutChange(event.target.value)} className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-[1.35rem] font-bold text-slate-100 focus:border-pink-400 focus:outline-none">
-                            {layoutOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                    {option.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
                 </section>
 
                 <section className="border-b border-slate-800 px-6 py-4">
@@ -246,29 +224,44 @@ export function ControlPanel({
 
                         <section className="border-b border-slate-800 px-6 py-4">
                             <p className="mb-4 text-[1.2rem] font-bold uppercase tracking-[0.2em] text-slate-500">Tamaño de cuadrícula</p>
-                            <div className="grid grid-cols-3 gap-3">
-                                {[
+                            {(() => {
+                                const isDouble = config.gridLayout !== "single";
+                                const sectionInner = 738;
+                                const available = isDouble
+                                    ? (sectionInner - 8) / 2 - 20
+                                    : sectionInner - 20;
+                                const maxDotSize = Math.max(8, Math.floor((available - (config.dotCols - 1) * 4) / config.dotCols));
+                                const fields = [
                                     { label: "Filas", key: "dotRows", min: 2, max: 15 },
                                     { label: "Columnas", key: "dotCols", min: 2, max: 20 },
-                                    { label: "Tamaño de circulo", key: "dotSize", min: 8 },
-                                ].map((field) => (
-                                    <div key={field.key}>
-                                        <p className="mb-1 text-[1.2rem] text-slate-400">{field.label}</p>
-                                        <input
-                                            type="number"
-                                            min={field.min}
-                                            max={field.max}
-                                            value={config[field.key]}
-                                            onChange={(event) => {
-                                                const nextValue = +event.target.value || field.min;
-                                                const safeValue = field.max ? Math.min(field.max, nextValue) : nextValue;
-                                                update(field.key, Math.max(field.min, safeValue));
-                                            }}
-                                            className="w-full rounded-xl border border-slate-700 bg-slate-800 px-2 py-2 text-center text-[1.35rem] font-bold text-slate-100 focus:border-pink-400 focus:outline-none"
-                                        />
+                                    { label: "Tamaño de círculo", key: "dotSize", min: 8, max: maxDotSize },
+                                ];
+                                return (
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {fields.map((field) => (
+                                            <div key={field.key}>
+                                                <p className="mb-1 text-[1.2rem] text-slate-400">{field.label}</p>
+                                                <input
+                                                    type="number"
+                                                    min={field.min}
+                                                    max={field.max}
+                                                    value={config[field.key]}
+                                                    onChange={(event) => {
+                                                        const nextValue = +event.target.value || field.min;
+                                                        const safeValue = Math.min(field.max, Math.max(field.min, nextValue));
+                                                        update(field.key, safeValue);
+                                                        if (field.key === "dotCols") {
+                                                            const newMax = Math.max(8, Math.floor((available - (safeValue - 1) * 4) / safeValue));
+                                                            if (config.dotSize > newMax) update("dotSize", newMax);
+                                                        }
+                                                    }}
+                                                    className="w-full rounded-xl border border-slate-700 bg-slate-800 px-2 py-2 text-center text-[1.35rem] font-bold text-slate-100 focus:border-pink-400 focus:outline-none"
+                                                />
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
+                                );
+                            })()}
                         </section>
                     </>
                 )}

@@ -9,7 +9,7 @@ export default function App() {
     const previewRef = useRef(null);
     const exportSheetRef = useRef(null);
     const [zoom, setZoom] = useState(70);
-    const { activities, config, activeActivityIndex, setActiveActivityIndex, update, updateOperation, updateOperand, addActivity, removeActivity, isAddSub, isMultDiv, activeOperandCount, getOperandCount, layout, setLayout, moveActivity } = useActivityConfig();
+    const { activities, config, activeActivityIndex, setActiveActivityIndex, update, updateOperation, updateOperand, addActivity, removeActivity, isAddSub, isMultDiv, activeOperandCount, getOperandCount, moveActivity } = useActivityConfig();
 
     const PREVIEW_VERTICAL_PADDING = 20;
 
@@ -66,15 +66,28 @@ export default function App() {
                             margin: 0;
                             padding: 0;
                             width: 210mm;
-                            min-height: 297mm;
                             background: #ffffff;
-                            overflow: hidden;
+                            overflow: visible;
                         }
 
                         body {
                             display: flex;
                             justify-content: center;
                             align-items: flex-start;
+                        }
+
+                        /* Override the app's @media print that sets overflow:hidden */
+                        @media print {
+                            html, body {
+                                overflow: visible !important;
+                                height: auto !important;
+                                min-height: 0 !important;
+                            }
+
+                            .app-layout, .app-preview {
+                                overflow: visible !important;
+                                height: auto !important;
+                            }
                         }
 
                         .sheet-preview-shell {
@@ -117,11 +130,10 @@ export default function App() {
         `;
     };
 
-    const buildExportDocument = (embeddedFontCss = "") => {
+    const buildSinglePageDocument = (embeddedFontCss = "", pageOuterHTML = "") => {
         const stylesheetMarkup = Array.from(document.querySelectorAll('style, link[rel="stylesheet"], link[rel="preconnect"]'))
             .map((node) => node.outerHTML)
             .join("");
-        const sheetMarkup = exportSheetRef.current?.outerHTML ?? "";
 
         return `
             <!doctype html>
@@ -129,55 +141,43 @@ export default function App() {
                 <head>
                     <meta charset="utf-8" />
                     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                    <title>Exportación de actividades</title>
+                    <title>Página</title>
                     ${stylesheetMarkup}
                     <style>
                         ${embeddedFontCss}
-
+                        /* Must be last so it overrides anything in the copied sheets */
+                        html {
+                            font-size: 62.5% !important;
+                        }
                         html, body {
-                            margin: 0;
-                            padding: 0;
-                            width: 210mm;
-                            min-height: 297mm;
-                            background: #ffffff;
-                            overflow: hidden;
+                            margin: 0 !important; padding: 0 !important;
+                            width: 794px !important; height: 1123px !important;
+                            background: #ffffff !important; overflow: hidden !important;
                         }
-
                         body {
-                            display: flex;
-                            justify-content: center;
-                            align-items: flex-start;
-                            background: #ffffff;
+                            display: flex !important;
+                            justify-content: center !important;
+                            align-items: flex-start !important;
                         }
-
-                        .sheet-preview-shell {
-                            padding: 0 !important;
-                            margin: 0 !important;
-                        }
-
-                        .sheet-document {
-                            display: flex;
-                            flex-direction: column;
-                            align-items: center;
-                            gap: 0 !important;
-                        }
-
                         .sheet-a4 {
-                            width: 210mm !important;
-                            min-height: 297mm !important;
+                            width: 794px !important;
+                            min-height: 1123px !important;
+                            height: 1123px !important;
                             border-radius: 0 !important;
                             box-shadow: none !important;
                             overflow: hidden !important;
-                            margin-bottom: 0 !important;
                         }
                     </style>
                 </head>
                 <body>
-                    ${sheetMarkup}
+                    <div style="padding:0;margin:0;width:794px;">
+                        ${pageOuterHTML}
+                    </div>
                 </body>
             </html>
         `;
     };
+
 
     const handlePrint = async () => {
         if (!exportSheetRef.current) return;
@@ -223,131 +223,138 @@ export default function App() {
 
     const handleExport = async () => {
         if (!exportSheetRef.current) return;
-        let exportFrame = null;
+
+        const sourcePages = Array.from(exportSheetRef.current.querySelectorAll(".sheet-a4"));
+        if (sourcePages.length === 0) return;
+
+        let currentFrame = null;
         try {
-            if (document.fonts?.ready) {
-                await document.fonts.ready;
-            }
+            if (document.fonts?.ready) await document.fonts.ready;
             const embeddedFontCss = await getEmbeddedFontCss();
-
-            const waitForImages = async (rootElement) => {
-                const images = Array.from(rootElement.querySelectorAll("img"));
-                await Promise.all(
-                    images.map((image) => {
-                        if (image.complete) {
-                            return Promise.resolve();
-                        }
-
-                        return new Promise((resolve) => {
-                            image.onload = () => resolve();
-                            image.onerror = () => resolve();
-                        });
-                    }),
-                );
-            };
-
-            exportFrame = document.createElement("iframe");
-            exportFrame.setAttribute("aria-hidden", "true");
-            exportFrame.style.position = "fixed";
-            exportFrame.style.left = "-100000px";
-            exportFrame.style.top = "0";
-            exportFrame.style.width = "794px";
-            exportFrame.style.height = "1123px";
-            exportFrame.style.border = "0";
-            exportFrame.style.opacity = "0";
-            exportFrame.style.pointerEvents = "none";
-            document.body.appendChild(exportFrame);
-
-            const frameDocument = exportFrame.contentDocument;
-            if (!frameDocument) {
-                throw new Error("No se pudo crear el documento de exportación.");
-            }
-
-            frameDocument.open();
-            frameDocument.write(buildExportDocument(embeddedFontCss));
-            frameDocument.close();
-
-            await new Promise((resolve) => {
-                exportFrame.onload = () => resolve();
-                window.setTimeout(resolve, 300);
-            });
-
-            if (frameDocument.fonts?.ready) {
-                await frameDocument.fonts.ready;
-            }
-
-            const frameSheetDocument = frameDocument.querySelector(".sheet-document");
-            if (!frameSheetDocument) {
-                throw new Error("No se encontró el documento para exportar.");
-            }
-
-            await waitForImages(frameDocument.body);
-
             const { default: html2canvas } = await import("html2canvas");
-            const sheetRect = frameSheetDocument.getBoundingClientRect();
-            const canvas = await html2canvas(frameSheetDocument, {
-                scale: 3,
-                useCORS: true,
-                foreignObjectRendering: true,
-                backgroundColor: "#ffffff",
-                logging: false,
-                width: Math.ceil(sheetRect.width),
-                height: Math.ceil(sheetRect.height),
-                windowWidth: Math.ceil(frameDocument.documentElement.scrollWidth),
-                windowHeight: Math.ceil(frameDocument.documentElement.scrollHeight),
-                onclone: (clonedDocument) => {
-                    const clonedSheet = clonedDocument.querySelector(".sheet-a4");
-                    if (clonedSheet) {
-                        clonedSheet.style.boxShadow = "none";
-                        clonedSheet.style.transform = "none";
-                    }
 
-                    clonedDocument.querySelectorAll(".dot").forEach((dot) => {
-                        dot.style.backgroundColor = "#d0d0d0";
-                        dot.style.borderColor = "#d0d0d0";
-                    });
-                },
-            });
-            document.body.removeChild(exportFrame);
-            exportFrame = null;
-            const a = document.createElement("a");
-            a.download = `actividades-${activities.length}.png`;
-            a.href = canvas.toDataURL("image/png");
-            a.click();
+            for (let i = 0; i < sourcePages.length; i++) {
+                currentFrame = document.createElement("iframe");
+                currentFrame.setAttribute("aria-hidden", "true");
+                currentFrame.style.cssText =
+                    "position:fixed;left:-200000px;top:0;width:794px;height:1123px;border:0;opacity:0;pointer-events:none;";
+                document.body.appendChild(currentFrame);
+
+                const frameDoc = currentFrame.contentDocument;
+                if (!frameDoc) throw new Error("No se pudo crear el iframe de exportación.");
+
+                frameDoc.open();
+                frameDoc.write(buildSinglePageDocument(embeddedFontCss, sourcePages[i].outerHTML));
+                frameDoc.close();
+
+                await new Promise((resolve) => {
+                    currentFrame.onload = () => resolve();
+                    window.setTimeout(resolve, 400);
+                });
+
+                if (frameDoc.fonts?.ready) await frameDoc.fonts.ready;
+
+                await Promise.all(
+                    Array.from(frameDoc.querySelectorAll("img")).map(
+                        (img) =>
+                            img.complete
+                                ? Promise.resolve()
+                                : new Promise((res) => {
+                                      img.onload = res;
+                                      img.onerror = res;
+                                  }),
+                    ),
+                );
+
+                const pageEl = frameDoc.querySelector(".sheet-a4");
+                if (!pageEl) { document.body.removeChild(currentFrame); currentFrame = null; continue; }
+
+                const canvas = await html2canvas(pageEl, {
+                    scale: 3,
+                    useCORS: true,
+                    backgroundColor: "#ffffff",
+                    logging: false,
+                    width: 794,
+                    height: 1123,
+                    windowWidth: 794,
+                    windowHeight: 1123,
+                    onclone: (clonedDoc) => {
+                        clonedDoc.documentElement.style.fontSize = "62.5%";
+                        clonedDoc.querySelectorAll(".dot").forEach((dot) => {
+                            dot.style.backgroundColor = "#d0d0d0";
+                            dot.style.borderColor = "#d0d0d0";
+                        });
+                        clonedDoc.querySelectorAll("[data-export-title='true']").forEach((title) => {
+                            title.style.margin = "0";
+                            title.style.lineHeight = "1";
+                            title.style.transform = "translateY(-0.2em)";
+                            title.style.transformOrigin = "center center";
+                        });
+                        clonedDoc.querySelectorAll("[data-export-title-wrap='true']").forEach((wrapper) => {
+                            wrapper.style.display = "flex";
+                            wrapper.style.alignItems = "center";
+                            wrapper.style.justifyContent = "center";
+                        });
+                        clonedDoc.querySelectorAll("[data-export-symbol='true']").forEach((symbol) => {
+                            symbol.style.margin = "0";
+                            symbol.style.lineHeight = "1";
+                            symbol.style.transform = "translateY(-0.14em)";
+                            symbol.style.transformOrigin = "center center";
+                        });
+                        clonedDoc.querySelectorAll("[data-export-symbol-wrap='true']").forEach((wrapper) => {
+                            wrapper.style.display = "inline-flex";
+                            wrapper.style.alignItems = "center";
+                            wrapper.style.justifyContent = "center";
+                        });
+                    },
+                });
+
+                document.body.removeChild(currentFrame);
+                currentFrame = null;
+
+                const suffix = sourcePages.length > 1 ? `-pag${i + 1}-de-${sourcePages.length}` : "";
+                const a = document.createElement("a");
+                a.download = `actividades${suffix}.png`;
+                a.href = canvas.toDataURL("image/png");
+                a.click();
+
+                if (i < sourcePages.length - 1) {
+                    await new Promise((resolve) => window.setTimeout(resolve, 350));
+                }
+            }
         } catch {
             alert('No se pudo exportar. Usá "Imprimir" y guardá como PDF.');
         } finally {
-            if (exportFrame?.parentNode) {
-                exportFrame.parentNode.removeChild(exportFrame);
-            }
+            if (currentFrame?.parentNode) currentFrame.parentNode.removeChild(currentFrame);
         }
     };
+
 
     return (
         <div className="app-layout flex h-screen overflow-hidden bg-slate-950">
             <div className="flex-[0_0_33.333%] max-w-[33.333%] min-w-[320px] h-full">
-                <ControlPanel activities={activities} config={config} activeActivityIndex={activeActivityIndex} onSelectActivity={setActiveActivityIndex} onAddActivity={addActivity} onRemoveActivity={removeActivity} onMoveActivity={moveActivity} layout={layout} onLayoutChange={setLayout} update={update} updateOperation={updateOperation} updateOperand={updateOperand} isAddSub={isAddSub} isMultDiv={isMultDiv} activeOperandCount={activeOperandCount} onPrint={handlePrint} onExport={handleExport} zoom={zoom} onZoomChange={setZoom} onFitHeight={fitToHeight} />
+                <ControlPanel activities={activities} config={config} activeActivityIndex={activeActivityIndex} onSelectActivity={setActiveActivityIndex} onAddActivity={addActivity} onRemoveActivity={removeActivity} onMoveActivity={moveActivity} update={update} updateOperation={updateOperation} updateOperand={updateOperand} isAddSub={isAddSub} isMultDiv={isMultDiv} activeOperandCount={activeOperandCount} onPrint={handlePrint} onExport={handleExport} zoom={zoom} onZoomChange={setZoom} onFitHeight={fitToHeight} />
             </div>
-            <main ref={previewRef} className="app-preview flex-1 overflow-auto flex items-center justify-center py-3 px-6 bg-[radial-gradient(circle_at_top,_rgba(236,72,153,0.16),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#111827_100%)]">
-                <div className="preview-stage flex items-center justify-center w-full min-h-full">
+            <main ref={previewRef} className="app-preview flex-1 overflow-auto flex items-start justify-center py-3 px-6 bg-[radial-gradient(circle_at_top,_rgba(236,72,153,0.16),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#111827_100%)]">
+                <div className="preview-stage flex items-start justify-center w-full py-4">
                     <div
                         className="preview-zoom-wrap"
                         style={{
                             zoom: `${zoom}%`,
                             display: "flex",
                             justifyContent: "center",
-                            alignItems: "center",
+                            alignItems: "flex-start",
                             width: "fit-content",
                         }}
                     >
-                        <ActivitySheet ref={sheetRef} activities={activities} getOperandCount={getOperandCount} layout={layout} />
+                        <ActivitySheet ref={sheetRef} activities={activities} getOperandCount={getOperandCount} />
                     </div>
                 </div>
             </main>
 
             {createPortal(
                 <div className="export-sheet-host" aria-hidden="true">
-                    <ActivitySheet ref={exportSheetRef} activities={activities} getOperandCount={getOperandCount} layout={layout} />
+                    <ActivitySheet ref={exportSheetRef} activities={activities} getOperandCount={getOperandCount} />
                 </div>,
                 document.body,
             )}

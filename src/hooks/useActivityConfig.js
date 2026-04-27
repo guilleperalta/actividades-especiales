@@ -52,12 +52,9 @@ function createActivity(overrides = {}) {
     };
 }
 
-const DEFAULT_LAYOUT = "vertical"; // vertical, horizontal, grid
-
 export function useActivityConfig() {
     const [activities, setActivities] = useState([createActivity()]);
     const [activeActivityIndex, setActiveActivityIndex] = useState(0);
-    const [layout, setLayout] = useState(DEFAULT_LAYOUT);
     // Reorder activities manually inside the current sheet.
     const moveActivity = (from, to) => {
         setActivities((prev) => {
@@ -169,8 +166,6 @@ export function useActivityConfig() {
         isMultDiv,
         activeOperandCount,
         getOperandCount,
-        layout,
-        setLayout,
         moveActivity,
     };
 }
