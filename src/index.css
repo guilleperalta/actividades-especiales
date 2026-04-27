@@ -3,14 +3,25 @@
 @tailwind utilities;
 
 @layer base {
+    :root {
+        --font-body: "Avenir Next", "Segoe UI", "Trebuchet MS", Verdana, sans-serif;
+        --font-display: "Arial Rounded MT Bold", "Trebuchet MS", "Avenir Next", Verdana, sans-serif;
+    }
+
     html {
         font-size: 62.5%; /* 1rem = 10px */
     }
     body {
-        font-family: "Nunito", sans-serif;
+        font-family: var(--font-body);
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
     }
+}
+
+.font-display {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 0.02em;
 }
 
 @layer components {
@@ -143,9 +154,29 @@ html,
         border-radius: 0 !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
+        page-break-after: always !important;
+        break-after: page !important;
         overflow: hidden !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+    }
+
+    .sheet-a4:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+
+    .table-grid-scroll,
+    .app-preview,
+    .sheet-document {
+        overflow: hidden !important;
+        scrollbar-width: none !important;
+    }
+
+    .table-grid-scroll::-webkit-scrollbar,
+    .app-preview::-webkit-scrollbar,
+    .sheet-document::-webkit-scrollbar {
+        display: none !important;
     }
 
     .export-sheet-host {

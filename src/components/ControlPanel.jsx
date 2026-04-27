@@ -72,7 +72,7 @@ export function ControlPanel({
         <>
             <aside className="control-panel-scroll no-print flex h-full min-w-0 w-full flex-col overflow-y-auto border-r border-slate-800 bg-slate-900 text-slate-100">
                 <div className="border-b border-slate-800 bg-slate-950/70 px-6 py-5">
-                    <h1 className="text-[2.8rem] font-bold text-slate-50" style={{ fontFamily: "'Fredoka One', cursive" }}>
+                    <h1 className="font-display text-[2.8rem] font-bold text-slate-50">
                         Generador de actividades
                     </h1>
                     <p className="mt-1 text-[1.15rem] uppercase tracking-[0.22em] text-slate-400">Educación especial</p>
@@ -250,7 +250,7 @@ export function ControlPanel({
                                 {[
                                     { label: "Filas", key: "dotRows", min: 2, max: 15 },
                                     { label: "Columnas", key: "dotCols", min: 2, max: 20 },
-                                    { label: "Tamaño de circulo", key: "dotSize", min: 8, max: 28 },
+                                    { label: "Tamaño de circulo", key: "dotSize", min: 8 },
                                 ].map((field) => (
                                     <div key={field.key}>
                                         <p className="mb-1 text-[1.2rem] text-slate-400">{field.label}</p>
@@ -259,7 +259,11 @@ export function ControlPanel({
                                             min={field.min}
                                             max={field.max}
                                             value={config[field.key]}
-                                            onChange={(event) => update(field.key, Math.max(field.min, Math.min(field.max, +event.target.value || field.min)))}
+                                            onChange={(event) => {
+                                                const nextValue = +event.target.value || field.min;
+                                                const safeValue = field.max ? Math.min(field.max, nextValue) : nextValue;
+                                                update(field.key, Math.max(field.min, safeValue));
+                                            }}
                                             className="w-full rounded-xl border border-slate-700 bg-slate-800 px-2 py-2 text-center text-[1.35rem] font-bold text-slate-100 focus:border-pink-400 focus:outline-none"
                                         />
                                     </div>
@@ -276,7 +280,7 @@ export function ControlPanel({
                         <div className="mb-3 grid grid-cols-3 gap-3">
                             {[
                                 { label: "Tamaño", key: "tableSize", min: 2, max: 12 },
-                                { label: "Tamaño de circulo", key: "dotSize", min: 8, max: 28 },
+                                { label: "Tamaño de circulo", key: "dotSize", min: 8 },
                                 { label: "Tamaño de imagen", key: "axisIconSize", min: 16, max: 64 },
                             ].map((field) => (
                                 <div key={field.key}>
@@ -286,7 +290,11 @@ export function ControlPanel({
                                         min={field.min}
                                         max={field.max}
                                         value={config[field.key]}
-                                        onChange={(event) => update(field.key, Math.max(field.min, Math.min(field.max, +event.target.value || field.min)))}
+                                        onChange={(event) => {
+                                            const nextValue = +event.target.value || field.min;
+                                            const safeValue = field.max ? Math.min(field.max, nextValue) : nextValue;
+                                            update(field.key, Math.max(field.min, safeValue));
+                                        }}
                                         className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-center text-[1.4rem] font-bold text-slate-100 focus:border-pink-400 focus:outline-none"
                                     />
                                 </div>

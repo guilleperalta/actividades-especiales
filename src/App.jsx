@@ -29,8 +29,24 @@ export default function App() {
         return () => window.removeEventListener("resize", fitToHeight);
     }, []);
 
-    const buildPrintDocument = () => {
-        const stylesheetMarkup = Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+    const getEmbeddedFontCss = async () => {
+        const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).filter((node) => node.href.includes("fonts.googleapis.com"));
+        const cssChunks = await Promise.all(
+            fontLinks.map(async (node) => {
+                try {
+                    const response = await fetch(node.href);
+                    return response.ok ? await response.text() : "";
+                } catch {
+                    return "";
+                }
+            }),
+        );
+
+        return cssChunks.filter(Boolean).join("\n");
+    };
+
+    const buildPrintDocument = (embeddedFontCss = "") => {
+        const stylesheetMarkup = Array.from(document.querySelectorAll('style, link[rel="stylesheet"], link[rel="preconnect"]'))
             .map((node) => node.outerHTML)
             .join("");
         const sheetMarkup = exportSheetRef.current?.outerHTML ?? "";
@@ -44,6 +60,8 @@ export default function App() {
                     <title>Impresión de actividades</title>
                     ${stylesheetMarkup}
                     <style>
+                        ${embeddedFontCss}
+
                         html, body {
                             margin: 0;
                             padding: 0;
@@ -64,12 +82,26 @@ export default function App() {
                             margin: 0 !important;
                         }
 
+                        .sheet-document {
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            gap: 0 !important;
+                        }
+
                         .sheet-a4 {
                             width: 210mm !important;
                             min-height: 297mm !important;
                             border-radius: 0 !important;
                             box-shadow: none !important;
                             overflow: hidden !important;
+                            page-break-after: always;
+                            break-after: page;
+                        }
+
+                        .sheet-a4:last-child {
+                            page-break-after: auto;
+                            break-after: auto;
                         }
 
                         @page {
@@ -85,8 +117,71 @@ export default function App() {
         `;
     };
 
+    const buildExportDocument = (embeddedFontCss = "") => {
+        const stylesheetMarkup = Array.from(document.querySelectorAll('style, link[rel="stylesheet"], link[rel="preconnect"]'))
+            .map((node) => node.outerHTML)
+            .join("");
+        const sheetMarkup = exportSheetRef.current?.outerHTML ?? "";
+
+        return `
+            <!doctype html>
+            <html lang="es">
+                <head>
+                    <meta charset="utf-8" />
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                    <title>Exportación de actividades</title>
+                    ${stylesheetMarkup}
+                    <style>
+                        ${embeddedFontCss}
+
+                        html, body {
+                            margin: 0;
+                            padding: 0;
+                            width: 210mm;
+                            min-height: 297mm;
+                            background: #ffffff;
+                            overflow: hidden;
+                        }
+
+                        body {
+                            display: flex;
+                            justify-content: center;
+                            align-items: flex-start;
+                            background: #ffffff;
+                        }
+
+                        .sheet-preview-shell {
+                            padding: 0 !important;
+                            margin: 0 !important;
+                        }
+
+                        .sheet-document {
+                            display: flex;
+                            flex-direction: column;
+                            align-items: center;
+                            gap: 0 !important;
+                        }
+
+                        .sheet-a4 {
+                            width: 210mm !important;
+                            min-height: 297mm !important;
+                            border-radius: 0 !important;
+                            box-shadow: none !important;
+                            overflow: hidden !important;
+                            margin-bottom: 0 !important;
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${sheetMarkup}
+                </body>
+            </html>
+        `;
+    };
+
     const handlePrint = async () => {
         if (!exportSheetRef.current) return;
+        const embeddedFontCss = await getEmbeddedFontCss();
 
         const printWindow = window.open("", "_blank", "width=1200,height=900");
         if (!printWindow) {
@@ -95,7 +190,7 @@ export default function App() {
         }
 
         printWindow.document.open();
-        printWindow.document.write(buildPrintDocument());
+        printWindow.document.write(buildPrintDocument(embeddedFontCss));
         printWindow.document.close();
 
         let hasPrinted = false;
@@ -128,11 +223,12 @@ export default function App() {
 
     const handleExport = async () => {
         if (!exportSheetRef.current) return;
-        let exportHost = null;
+        let exportFrame = null;
         try {
             if (document.fonts?.ready) {
                 await document.fonts.ready;
             }
+            const embeddedFontCss = await getEmbeddedFontCss();
 
             const waitForImages = async (rootElement) => {
                 const images = Array.from(rootElement.querySelectorAll("img"));
@@ -150,35 +246,55 @@ export default function App() {
                 );
             };
 
-            exportHost = document.createElement("div");
-            exportHost.style.position = "fixed";
-            exportHost.style.left = "0";
-            exportHost.style.top = "0";
-            exportHost.style.width = "210mm";
-            exportHost.style.minHeight = "297mm";
-            exportHost.style.padding = "0";
-            exportHost.style.margin = "0";
-            exportHost.style.background = "#ffffff";
-            exportHost.style.zIndex = "-1";
-            exportHost.style.pointerEvents = "none";
+            exportFrame = document.createElement("iframe");
+            exportFrame.setAttribute("aria-hidden", "true");
+            exportFrame.style.position = "fixed";
+            exportFrame.style.left = "-100000px";
+            exportFrame.style.top = "0";
+            exportFrame.style.width = "794px";
+            exportFrame.style.height = "1123px";
+            exportFrame.style.border = "0";
+            exportFrame.style.opacity = "0";
+            exportFrame.style.pointerEvents = "none";
+            document.body.appendChild(exportFrame);
 
-            const exportClone = exportSheetRef.current.cloneNode(true);
-            exportHost.appendChild(exportClone);
-            document.body.appendChild(exportHost);
+            const frameDocument = exportFrame.contentDocument;
+            if (!frameDocument) {
+                throw new Error("No se pudo crear el documento de exportación.");
+            }
 
-            await waitForImages(exportHost);
+            frameDocument.open();
+            frameDocument.write(buildExportDocument(embeddedFontCss));
+            frameDocument.close();
+
+            await new Promise((resolve) => {
+                exportFrame.onload = () => resolve();
+                window.setTimeout(resolve, 300);
+            });
+
+            if (frameDocument.fonts?.ready) {
+                await frameDocument.fonts.ready;
+            }
+
+            const frameSheetDocument = frameDocument.querySelector(".sheet-document");
+            if (!frameSheetDocument) {
+                throw new Error("No se encontró el documento para exportar.");
+            }
+
+            await waitForImages(frameDocument.body);
 
             const { default: html2canvas } = await import("html2canvas");
-            const canvas = await html2canvas(exportClone, {
+            const sheetRect = frameSheetDocument.getBoundingClientRect();
+            const canvas = await html2canvas(frameSheetDocument, {
                 scale: 3,
                 useCORS: true,
-                foreignObjectRendering: false,
+                foreignObjectRendering: true,
                 backgroundColor: "#ffffff",
                 logging: false,
-                width: exportClone.scrollWidth,
-                height: exportClone.scrollHeight,
-                windowWidth: exportClone.scrollWidth,
-                windowHeight: exportClone.scrollHeight,
+                width: Math.ceil(sheetRect.width),
+                height: Math.ceil(sheetRect.height),
+                windowWidth: Math.ceil(frameDocument.documentElement.scrollWidth),
+                windowHeight: Math.ceil(frameDocument.documentElement.scrollHeight),
                 onclone: (clonedDocument) => {
                     const clonedSheet = clonedDocument.querySelector(".sheet-a4");
                     if (clonedSheet) {
@@ -192,8 +308,8 @@ export default function App() {
                     });
                 },
             });
-            document.body.removeChild(exportHost);
-            exportHost = null;
+            document.body.removeChild(exportFrame);
+            exportFrame = null;
             const a = document.createElement("a");
             a.download = `actividades-${activities.length}.png`;
             a.href = canvas.toDataURL("image/png");
@@ -201,8 +317,8 @@ export default function App() {
         } catch {
             alert('No se pudo exportar. Usá "Imprimir" y guardá como PDF.');
         } finally {
-            if (exportHost?.parentNode) {
-                exportHost.parentNode.removeChild(exportHost);
+            if (exportFrame?.parentNode) {
+                exportFrame.parentNode.removeChild(exportFrame);
             }
         }
     };

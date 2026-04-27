@@ -113,6 +113,19 @@ export function saveRemoteSvgItem({ name, imageUrl, thumbnailUrl = "", sourceUrl
     return nextItem;
 }
 
+export function saveIconifyItem({ name, iconName }) {
+    const trimmedName = name.trim();
+    const nextItem = {
+        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
+        name: trimmedName,
+        sourceType: "iconify",
+        iconName,
+    };
+    const nextItems = [nextItem, ...loadSavedSvgItems()];
+    persistSavedSvgItems(nextItems);
+    return nextItem;
+}
+
 export function removeSavedSvgItem(id) {
     const nextItems = loadSavedSvgItems().filter((item) => item.id !== id);
     persistSavedSvgItems(nextItems);
@@ -154,6 +167,13 @@ export function resolveAxisGraphic(iconReference, savedItems = loadSavedSvgItems
                 type: "image",
                 value: savedItem.imageUrl,
                 thumbnailUrl: savedItem.thumbnailUrl || savedItem.imageUrl,
+            };
+        }
+
+        if (savedItem.sourceType === "iconify" && savedItem.iconName) {
+            return {
+                type: "iconify",
+                value: savedItem.iconName,
             };
         }
 

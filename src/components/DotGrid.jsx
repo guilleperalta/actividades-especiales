@@ -39,8 +39,8 @@ export function DotGrid({
     const safeRows = Math.max(1, rows);
     const safeCols = Math.max(1, cols);
     const dotRem = dotSize / 10;
-    const containerClassName = expandContainer ? "flex-1 min-w-0" : fillSpace ? "flex-1 h-full min-h-0" : "w-fit max-w-full";
-    const wrapperClassName = expandContainer || fillSpace ? "flex h-full w-full items-center justify-center" : "flex w-full items-center justify-center";
+    const containerClassName = fillSpace ? "flex-1 h-full min-h-0" : "w-fit max-w-full mx-auto";
+    const wrapperClassName = fillSpace ? "flex h-full items-center justify-center" : "block";
     const gridStyle = fillSpace
         ? {
               display: "grid",
@@ -56,7 +56,8 @@ export function DotGrid({
               gridTemplateColumns: `repeat(${safeCols}, ${dotRem}rem)`,
               gridAutoRows: `${dotRem}rem`,
               gap: "0.4rem",
-              width: "fit-content",
+              width: "max-content",
+              margin: "0 auto",
           };
 
     return (
@@ -74,7 +75,9 @@ export function DotGrid({
 
 function TableGrid({ size, dotSize, itemType, xAxisIcon, yAxisIcon, axisIconSize, showAxisNumbers, fillSpace }) {
     const safeSize = Math.max(2, Math.min(12, size));
-    const dotRem = Math.max(1, Math.min(2, dotSize / 10));
+    const dotRem = Math.max(1, dotSize / 10);
+    const cellSizeRem = Math.max(4.6, dotRem + 2.2);
+    const headerCellSizeRem = Math.max(cellSizeRem, axisIconSize / 10 + 2.1);
     const tableClassName = fillSpace ? "h-full w-full" : "w-full";
     const resolvedXAxisIcon = resolveAxisGraphic(xAxisIcon);
     const resolvedYAxisIcon = resolveAxisGraphic(yAxisIcon);
@@ -95,9 +98,9 @@ function TableGrid({ size, dotSize, itemType, xAxisIcon, yAxisIcon, axisIconSize
             <table className={`border-collapse ${tableClassName}`} style={{ tableLayout: "fixed" }}>
                 <thead>
                     <tr>
-                        <th className="h-[4.4rem] w-[4.6rem] border border-gray-300 bg-gray-200" />
+                        <th className="border border-gray-300 bg-gray-200" style={{ width: `${cellSizeRem}rem`, height: `${headerCellSizeRem}rem` }} />
                         {Array.from({ length: safeSize }, (_, index) => (
-                            <th key={index} className="h-[4.4rem] w-[4.6rem] border border-gray-300 bg-gray-100 text-center">
+                            <th key={index} className="border border-gray-300 bg-gray-100 text-center" style={{ width: `${cellSizeRem}rem`, height: `${headerCellSizeRem}rem` }}>
                                 {renderAxisCell(resolvedXAxisIcon, index)}
                             </th>
                         ))}
@@ -106,9 +109,11 @@ function TableGrid({ size, dotSize, itemType, xAxisIcon, yAxisIcon, axisIconSize
                 <tbody>
                     {Array.from({ length: safeSize }, (_, rowIndex) => (
                         <tr key={rowIndex}>
-                            <td className="h-[4.6rem] border border-gray-300 bg-gray-100 text-center">{renderAxisCell(resolvedYAxisIcon, rowIndex)}</td>
+                            <td className="border border-gray-300 bg-gray-100 text-center" style={{ width: `${cellSizeRem}rem`, height: `${cellSizeRem}rem` }}>
+                                {renderAxisCell(resolvedYAxisIcon, rowIndex)}
+                            </td>
                             {Array.from({ length: safeSize }, (_, columnIndex) => (
-                                <td key={columnIndex} className="border border-gray-200 bg-white p-0.5 text-center">
+                                <td key={columnIndex} className="border border-gray-200 bg-white p-0.5 text-center" style={{ width: `${cellSizeRem}rem`, height: `${cellSizeRem}rem` }}>
                                     <CellItem itemType={itemType} index={rowIndex * safeSize + columnIndex} size={dotRem} />
                                 </td>
                             ))}
