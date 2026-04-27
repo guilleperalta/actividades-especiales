@@ -11,7 +11,7 @@ const OPERATION_ICONS = {
     division: "÷",
 };
 
-export function ControlPanel({ config, activities, activeActivityIndex, onSelectActivity, onAddActivity, onRemoveActivity, onMoveActivity, update, updateOperation, updateOperand, isAddSub, isMultDiv, activeOperandCount, onPrint, onExport, zoom, onZoomChange, onFitHeight, savedSvgItems, onSavedItemsChange }) {
+export function ControlPanel({ config, activities, activeActivityIndex, onSelectActivity, onAddActivity, onRemoveActivity, onMoveActivity, update, updateOperation, updateOperand, isAddSub, isMultDiv, activeOperandCount, onPrint, zoom, onZoomChange, onFitHeight, savedSvgItems, onSavedItemsChange }) {
     const [pickerTarget, setPickerTarget] = useState(null);
 
     const handleIconSelect = (iconReference) => {
@@ -270,9 +270,6 @@ export function ControlPanel({ config, activities, activeActivityIndex, onSelect
                 <div className="mt-auto flex flex-col gap-3 bg-slate-950/60 px-6 py-5">
                     <button type="button" onClick={onPrint} className="w-full rounded-xl bg-pink-500 py-3 text-[1.45rem] font-bold text-white transition-colors hover:bg-pink-600">
                         🖨️ Imprimir hoja A4
-                    </button>
-                    <button type="button" onClick={onExport} className="w-full rounded-xl border border-slate-700 bg-slate-800 py-3 text-[1.45rem] font-bold text-slate-100 transition-colors hover:bg-slate-700">
-                        📥 Exportar como imagen
                     </button>
                 </div>
             </aside>

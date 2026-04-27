@@ -3,56 +3,12 @@ import { createSavedIconReference, removeSavedSvgItem, resolveAxisGraphic, saveI
 import { AxisGraphic } from "./AxisGraphic";
 
 const ICONIFY_SEARCH_API_URL = "https://api.iconify.design/search";
-const MY_MEMORY_TRANSLATE_API_URL = "https://api.mymemory.translated.net/get";
-const DATAMUSE_RELATED_API_URL = "https://api.datamuse.com/words";
-const ONLINE_TRANSLATION_TIMEOUT_MS = 1200;
 const MAX_REMOTE_RESULTS = 40;
 
-async function fetchEnglishTranslations(searchValue, signal) {
-    const params = new URLSearchParams({
-        q: searchValue.trim(),
-        langpair: "es|en",
-    });
-    const response = await fetch(`${MY_MEMORY_TRANSLATE_API_URL}?${params.toString()}`, {
-        signal,
-    });
-
-    if (!response.ok) {
-        throw new Error("No se pudo traducir el término de búsqueda.");
-    }
-
-    const payload = await response.json();
-    const translatedText = typeof payload?.responseData?.translatedText === "string" ? payload.responseData.translatedText.trim() : "";
-    const alternativeTranslations = Array.isArray(payload?.matches)
-        ? payload.matches.map((match) => (typeof match?.translation === "string" ? match.translation.trim() : "")).filter(Boolean)
-        : [];
-
-    return Array.from(new Set([translatedText, ...alternativeTranslations])).filter(Boolean);
-}
-
-async function fetchRelatedTerms(searchValue, signal) {
-    const params = new URLSearchParams({
-        ml: searchValue.trim(),
-        max: "12",
-    });
-    const response = await fetch(`${DATAMUSE_RELATED_API_URL}?${params.toString()}`, {
-        signal,
-    });
-
-    if (!response.ok) {
-        throw new Error("No se pudieron obtener términos relacionados.");
-    }
-
-    const payload = await response.json();
-    return Array.isArray(payload) ? payload.map((item) => (typeof item?.word === "string" ? item.word.trim() : "")).filter(Boolean) : [];
-}
-
-function buildRemoteQueries(searchValue, translatedTerms = []) {
+function buildRemoteQueries(searchValue) {
     const normalizedSearch = searchValue.trim().toLowerCase();
     const tokens = normalizedSearch.split(/\s+/).filter(Boolean);
-    const onlineTranslatedTokens = translatedTerms.flatMap((term) => term.toLowerCase().split(/\s+/).filter(Boolean));
-
-    return Array.from(new Set([normalizedSearch, ...tokens, ...onlineTranslatedTokens])).filter(Boolean);
+    return Array.from(new Set([normalizedSearch, ...tokens])).filter(Boolean);
 }
 
 async function searchIconifyQueries(queries, signal) {
@@ -77,10 +33,6 @@ async function searchIconifyQueries(queries, signal) {
     return payloads.flatMap((payload) => payload.icons ?? []).filter((iconName, index, allIcons) => allIcons.indexOf(iconName) === index);
 }
 
-function mergeUniqueStrings(currentItems, nextItems) {
-    return [...currentItems, ...nextItems].filter((item, index, allItems) => allItems.indexOf(item) === index);
-}
-
 function mapRemoteResults(iconNames) {
     return iconNames
         .slice(0, MAX_REMOTE_RESULTS)
@@ -89,6 +41,23 @@ function mapRemoteResults(iconNames) {
             iconName,
             label: iconName.split(":")[1].replace(/[-_]+/g, " "),
         }));
+}
+
+function buildGoogleTranslateUrl(searchValue) {
+    const normalizedSearch = searchValue.trim();
+
+    if (!normalizedSearch) {
+        return "https://translate.google.com/?sl=es&tl=en&op=translate";
+    }
+
+    const params = new URLSearchParams({
+        sl: "es",
+        tl: "en",
+        text: normalizedSearch,
+        op: "translate",
+    });
+
+    return `https://translate.google.com/?${params.toString()}`;
 }
 
 /**
@@ -124,38 +93,11 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
             setRemoteError("");
 
             try {
-                const baseQueries = buildRemoteQueries(searchTerm);
-                const baseIcons = await searchIconifyQueries(baseQueries, controller.signal);
-                const baseResults = mapRemoteResults(baseIcons);
-                setRemoteResults(baseResults);
-
-                const translatedTerms = await Promise.race([fetchEnglishTranslations(searchTerm, controller.signal), new Promise((resolve) => window.setTimeout(() => resolve([]), ONLINE_TRANSLATION_TIMEOUT_MS))]).catch(() => []);
-                const translatedQueries = buildRemoteQueries(searchTerm, translatedTerms).filter((query) => !baseQueries.includes(query));
-                let mergedIcons = baseIcons;
-
-                if (translatedQueries.length > 0) {
-                    const translatedIcons = await searchIconifyQueries(translatedQueries, controller.signal);
-                    mergedIcons = mergeUniqueStrings(mergedIcons, translatedIcons);
-                    setRemoteResults(mapRemoteResults(mergedIcons));
-                }
-
-                const semanticSeeds = mergeUniqueStrings(translatedTerms, baseQueries);
-                const relatedTermGroups = await Promise.all(
-                    semanticSeeds.map((term) =>
-                        Promise.race([fetchRelatedTerms(term, controller.signal), new Promise((resolve) => window.setTimeout(() => resolve([]), ONLINE_TRANSLATION_TIMEOUT_MS))]).catch(() => []),
-                    ),
-                );
-                const relatedTerms = mergeUniqueStrings([], relatedTermGroups.flat());
-                const relatedQueries = buildRemoteQueries(searchTerm, [...translatedTerms, ...relatedTerms]).filter((query) => !baseQueries.includes(query) && !translatedQueries.includes(query));
-
-                if (relatedQueries.length > 0) {
-                    const relatedIcons = await searchIconifyQueries(relatedQueries, controller.signal);
-                    mergedIcons = mergeUniqueStrings(mergedIcons, relatedIcons);
-                }
-
-                const nextResults = mapRemoteResults(mergedIcons);
-
+                const remoteQueries = buildRemoteQueries(searchTerm);
+                const remoteIcons = await searchIconifyQueries(remoteQueries, controller.signal);
+                const nextResults = mapRemoteResults(remoteIcons);
                 setRemoteResults(nextResults);
+
                 if (nextResults.length === 0) {
                     setRemoteError("No encontré iconos útiles con ese término.");
                 }
@@ -186,6 +128,7 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
             return accumulator;
         }, {});
     }, [filteredCatalog]);
+    const googleTranslateUrl = buildGoogleTranslateUrl(searchTerm);
 
     const selectedGraphic = resolveAxisGraphic(selectedIcon, savedItems);
     const pendingGraphic = pendingRemoteIcon ? { type: "iconify", value: pendingRemoteIcon.iconName } : selectedGraphic;
@@ -237,6 +180,9 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
                                 <span className="mb-2 block text-[1.25rem] font-bold uppercase tracking-[0.18em] text-slate-500">Buscar icono</span>
                                 <input type="text" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Ej.: manzana, nena, colectivo, perro..." className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-[1.45rem] text-slate-100 outline-none transition-colors placeholder:text-slate-500 focus:border-pink-400" />
                             </label>
+                            <a href={googleTranslateUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-[1.15rem] font-semibold text-slate-200 transition-colors hover:bg-slate-700 hover:text-white">
+                                Ver traducción en Google Translate
+                            </a>
                         </div>
 
                         <div className="svg-picker-scroll min-h-0 flex-1 overflow-y-auto px-6 py-5">

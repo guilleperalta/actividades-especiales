@@ -7,7 +7,6 @@ const LIBRARY_FOLDER_NAME = "saved-axis-images";
 const LIBRARY_PUBLIC_DIR = path.resolve(process.cwd(), "public", LIBRARY_FOLDER_NAME);
 const LIBRARY_INDEX_FILE = path.resolve(LIBRARY_PUBLIC_DIR, "index.json");
 const ICONIFY_ICON_API_URL = "https://api.iconify.design";
-const MY_MEMORY_TRANSLATE_API_URL = "https://api.mymemory.translated.net/get";
 
 function sanitizeFileNameSegment(value) {
     return value
@@ -58,28 +57,6 @@ async function fetchIconifySvg(iconName) {
     }
 
     return response.text();
-}
-
-async function translateTextToEnglish(text) {
-    const params = new URLSearchParams({
-        q: text.trim(),
-        langpair: "es|en",
-    });
-    const response = await fetch(`${MY_MEMORY_TRANSLATE_API_URL}?${params.toString()}`);
-
-    if (!response.ok) {
-        throw new Error("Could not translate the search text.");
-    }
-
-    const payload = await response.json();
-    const translatedText = typeof payload?.responseData?.translatedText === "string" ? payload.responseData.translatedText.trim() : "";
-    const alternativeTranslations = Array.isArray(payload?.matches)
-        ? payload.matches
-              .map((match) => (typeof match?.translation === "string" ? match.translation.trim() : ""))
-              .filter(Boolean)
-        : [];
-
-    return Array.from(new Set([translatedText, ...alternativeTranslations])).filter(Boolean);
 }
 
 async function buildLocalFileItem({ name, svgContent, iconName = "" }) {
@@ -177,22 +154,6 @@ function createLibraryApiPlugin() {
         }
 
         try {
-            if (req.method === "GET" && requestUrl.pathname === "/api/translate/es-en") {
-                const text = requestUrl.searchParams.get("text")?.trim() ?? "";
-
-                if (!text) {
-                    res.statusCode = 400;
-                    res.setHeader("Content-Type", "application/json; charset=utf-8");
-                    res.end(JSON.stringify({ message: "Text is required." }));
-                    return true;
-                }
-
-                const translations = await translateTextToEnglish(text);
-                res.setHeader("Content-Type", "application/json; charset=utf-8");
-                res.end(JSON.stringify({ translations }));
-                return true;
-            }
-
             if (req.method === "GET" && requestUrl.pathname === "/api/library/items") {
                 const items = await readLibraryItems();
                 res.setHeader("Content-Type", "application/json; charset=utf-8");
