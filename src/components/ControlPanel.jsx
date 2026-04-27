@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { getSvgLibraryLabel, loadSavedSvgItems, resolveAxisGraphic } from "../data/svgLibrary";
+import { useState } from "react";
+import { getSvgLibraryLabel, resolveAxisGraphic } from "../data/svgLibrary";
 import { OPERATION_INFO } from "../hooks/useActivityConfig";
 import { AxisGraphic } from "./AxisGraphic";
 import { SvgPickerModal } from "./SvgPickerModal";
@@ -11,36 +11,8 @@ const OPERATION_ICONS = {
     division: "÷",
 };
 
-export function ControlPanel({
-    config,
-    activities,
-    activeActivityIndex,
-    onSelectActivity,
-    onAddActivity,
-    onRemoveActivity,
-    onMoveActivity,
-    update,
-    updateOperation,
-    updateOperand,
-    isAddSub,
-    isMultDiv,
-    activeOperandCount,
-    onPrint,
-    onExport,
-    zoom,
-    onZoomChange,
-    onFitHeight,
-}) {
+export function ControlPanel({ config, activities, activeActivityIndex, onSelectActivity, onAddActivity, onRemoveActivity, onMoveActivity, update, updateOperation, updateOperand, isAddSub, isMultDiv, activeOperandCount, onPrint, onExport, zoom, onZoomChange, onFitHeight, savedSvgItems, onSavedItemsChange }) {
     const [pickerTarget, setPickerTarget] = useState(null);
-    const [savedSvgItems, setSavedSvgItems] = useState([]);
-
-    useEffect(() => {
-        setSavedSvgItems(loadSavedSvgItems());
-    }, []);
-
-    const refreshSavedSvgItems = () => {
-        setSavedSvgItems(loadSavedSvgItems());
-    };
 
     const handleIconSelect = (iconReference) => {
         if (!pickerTarget) {
@@ -60,9 +32,7 @@ export function ControlPanel({
         <>
             <aside className="control-panel-scroll no-print flex h-full min-w-0 w-full flex-col overflow-y-auto border-r border-slate-800 bg-slate-900 text-slate-100">
                 <div className="border-b border-slate-800 bg-slate-950/70 px-6 py-5">
-                    <h1 className="font-display text-[2.8rem] font-bold text-slate-50">
-                        Generador de actividades
-                    </h1>
+                    <h1 className="font-display text-[2.8rem] font-bold text-slate-50">Generador de actividades</h1>
                     <p className="mt-1 text-[1.15rem] uppercase tracking-[0.22em] text-slate-400">Educación especial</p>
                 </div>
 
@@ -115,21 +85,13 @@ export function ControlPanel({
                             </div>
                         ))}
                     </div>
-
                 </section>
 
                 <section className="border-b border-slate-800 px-6 py-4">
                     <p className="mb-4 text-[1.2rem] font-bold uppercase tracking-[0.2em] text-slate-500">Operación</p>
                     <div className="grid grid-cols-4 gap-2">
                         {Object.entries(OPERATION_INFO).map(([key, info]) => (
-                            <button
-                                key={key}
-                                type="button"
-                                onClick={() => updateOperation(key)}
-                                className={`flex min-h-[7rem] flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-[1.12rem] font-bold transition-all ${
-                                    config.operation === key ? "border-pink-400 bg-pink-500/10 text-pink-300" : "border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-800"
-                                }`}
-                            >
+                            <button key={key} type="button" onClick={() => updateOperation(key)} className={`flex min-h-[7rem] flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-[1.12rem] font-bold transition-all ${config.operation === key ? "border-pink-400 bg-pink-500/10 text-pink-300" : "border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-800"}`}>
                                 <span className="text-[2rem]">{OPERATION_ICONS[key]}</span>
                                 <span className="text-center leading-tight">{info.label}</span>
                             </button>
@@ -142,14 +104,7 @@ export function ControlPanel({
                         <p className="mb-4 text-[1.2rem] font-bold uppercase tracking-[0.2em] text-slate-500">Cantidad de números</p>
                         <div className="flex gap-3">
                             {[2, 3, 4].map((count) => (
-                                <button
-                                    key={count}
-                                    type="button"
-                                    onClick={() => update("numOperands", count)}
-                                    className={`flex-1 rounded-full border py-2.5 text-[1.25rem] font-bold transition-all ${
-                                        config.numOperands === count ? "border-pink-400 bg-pink-500/10 text-pink-300" : "border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-800"
-                                    }`}
-                                >
+                                <button key={count} type="button" onClick={() => update("numOperands", count)} className={`flex-1 rounded-full border py-2.5 text-[1.25rem] font-bold transition-all ${config.numOperands === count ? "border-pink-400 bg-pink-500/10 text-pink-300" : "border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-800"}`}>
                                     {count} núm.
                                 </button>
                             ))}
@@ -158,22 +113,12 @@ export function ControlPanel({
                 )}
 
                 <section className="border-b border-slate-800 px-6 py-4">
-                    <p className="mb-4 text-[1.2rem] font-bold uppercase tracking-[0.2em] text-slate-500">
-                        Valores {isAddSub && <span className="normal-case tracking-normal text-slate-400">(opcional)</span>}
-                    </p>
+                    <p className="mb-4 text-[1.2rem] font-bold uppercase tracking-[0.2em] text-slate-500">Valores {isAddSub && <span className="normal-case tracking-normal text-slate-400">(opcional)</span>}</p>
                     <div className="grid grid-cols-2 gap-3">
                         {Array.from({ length: activeOperandCount }).map((_, index) => (
                             <div key={index} className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-3">
                                 <p className="mb-2 text-[1.2rem] text-slate-400">Número {index + 1}</p>
-                                <input
-                                    type="number"
-                                    min="0"
-                                    max="999"
-                                    value={config.operandValues[index]}
-                                    onChange={(event) => updateOperand(index, event.target.value)}
-                                    placeholder="—"
-                                    className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-center text-[1.45rem] font-bold text-slate-100 focus:border-pink-400 focus:outline-none"
-                                />
+                                <input type="number" min="0" max="999" value={config.operandValues[index]} onChange={(event) => updateOperand(index, event.target.value)} placeholder="—" className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-center text-[1.45rem] font-bold text-slate-100 focus:border-pink-400 focus:outline-none" />
                             </div>
                         ))}
                     </div>
@@ -227,9 +172,7 @@ export function ControlPanel({
                             {(() => {
                                 const isDouble = config.gridLayout !== "single";
                                 const sectionInner = 738;
-                                const available = isDouble
-                                    ? (sectionInner - 8) / 2 - 20
-                                    : sectionInner - 20;
+                                const available = isDouble ? (sectionInner - 8) / 2 - 20 : sectionInner - 20;
                                 const maxDotSize = Math.max(8, Math.floor((available - (config.dotCols - 1) * 4) / config.dotCols));
                                 const fields = [
                                     { label: "Filas", key: "dotRows", min: 2, max: 15 },
@@ -309,7 +252,7 @@ export function ControlPanel({
                                         <p className="mb-2 text-[1.2rem] text-slate-400">{axis.label}</p>
                                         <button type="button" onClick={() => setPickerTarget(axis.key)} className="flex w-full items-center justify-between rounded-xl border border-slate-700 bg-slate-800 px-3 py-3 transition-colors hover:bg-slate-700">
                                             <span className="flex items-center gap-3">
-                                                <AxisGraphic graphic={resolvedIcon} size={36} />
+                                                <AxisGraphic graphic={resolvedIcon} size={36} adaptiveBackdrop />
                                                 <span className="text-left">
                                                     <span className="block text-[1.3rem] font-bold text-slate-100">{label}</span>
                                                     <span className="block text-[1.1rem] text-slate-400">Abrir biblioteca</span>
@@ -334,16 +277,7 @@ export function ControlPanel({
                 </div>
             </aside>
 
-            {pickerTarget && (
-                <SvgPickerModal
-                    title={pickerTarget === "xAxisIcon" ? "Elegir imagen para Eje X" : "Elegir imagen para Eje Y"}
-                    selectedIcon={config[pickerTarget]}
-                    savedItems={savedSvgItems}
-                    onSelect={handleIconSelect}
-                    onSavedItemsChange={refreshSavedSvgItems}
-                    onClose={() => setPickerTarget(null)}
-                />
-            )}
+            {pickerTarget && <SvgPickerModal title={pickerTarget === "xAxisIcon" ? "Elegir imagen para Eje X" : "Elegir imagen para Eje Y"} selectedIcon={config[pickerTarget]} savedItems={savedSvgItems} onSelect={handleIconSelect} onSavedItemsChange={onSavedItemsChange} onClose={() => setPickerTarget(null)} />}
         </>
     );
 }

@@ -47,10 +47,7 @@ function getActivityHeightPx(activity) {
 
     const operandCount = activity.numOperands;
     const gridHeightPx = getDotGridHeightPx(activity.dotRows, activity.dotSize);
-    const totalGridHeightPx =
-        activity.gridLayout === "single"
-            ? gridHeightPx
-            : Math.ceil(operandCount / 2) * gridHeightPx + Math.max(0, Math.ceil(operandCount / 2) - 1) * GRID_ROW_GAP_PX;
+    const totalGridHeightPx = activity.gridLayout === "single" ? gridHeightPx : Math.ceil(operandCount / 2) * gridHeightPx + Math.max(0, Math.ceil(operandCount / 2) - 1) * GRID_ROW_GAP_PX;
 
     return SECTION_VERTICAL_PADDING_PX + SECTION_BORDER_PX + HEADER_BLOCK_HEIGHT_PX + EQUATION_BLOCK_HEIGHT_PX + GRID_TOP_PADDING_PX + totalGridHeightPx;
 }
@@ -113,7 +110,7 @@ function getPageSignature(pages) {
     return pages.map((page) => page.map(({ activity }) => activity.id).join(",")).join("|");
 }
 
-export const ActivitySheet = forwardRef(function ActivitySheet({ activities, getOperandCount }, ref) {
+export const ActivitySheet = forwardRef(function ActivitySheet({ activities, getOperandCount, savedSvgItems = [] }, ref) {
     const fallbackPages = useMemo(() => buildVerticalPages(activities, getOperandCount), [activities, getOperandCount]);
     const [pages, setPages] = useState(fallbackPages);
     const rootRef = useRef(null);
@@ -162,79 +159,89 @@ export const ActivitySheet = forwardRef(function ActivitySheet({ activities, get
                         <div className="sheet-a4 shadow-xl bg-white flex flex-col gap-0 rounded-2xl border-0 w-[210mm] min-h-[297mm] p-[1.4rem_1.6rem]" style={{ boxSizing: "border-box" }}>
                             <div className="grid grid-cols-1 gap-5">
                                 {pageActivities.map(({ activity, operandCount }) => {
-                        const info = OPERATION_INFO[activity.operation];
-                        const isAddSub = activity.operation === "suma" || activity.operation === "resta";
-                        const isMultDiv = !isAddSub;
-                        const activeOperandCount = operandCount;
-                        const titleSizeClass = "text-[4rem]";
-                        const titleWrapClass = "min-w-[20rem] px-[3.2rem] py-[1rem]";
-                        const boxSize = activeOperandCount > 2 ? "w-[6.6rem] h-[6.6rem] text-[3rem]" : "w-[8.8rem] h-[8.8rem] text-[3.8rem]";
-                        const symSize = activeOperandCount > 2 ? "text-[3.2rem]" : "text-[4.2rem]";
-                        const equationGapClass = "gap-4";
-                        const sectionPaddingClass = "p-[1.6rem]";
-                        const headerMarginClass = "mb-4";
-                        const equationPaddingClass = "py-3";
-                        const gridTopPaddingClass = "pt-3";
-                        const gridWrapClass = "grid gap-3 justify-center items-start w-full";
-                        const gridMinWidthPx = getDotGridWidthPx(activity.dotCols, activity.dotSize);
-                        const gridWrapStyle = {
-                            gridTemplateColumns: `repeat(auto-fit, minmax(${gridMinWidthPx}px, max-content))`,
-                        };
-                        const effectiveDotSize = activity.dotSize;
-                        const effectiveAxisIconSize = activity.axisIconSize;
-                        const effectiveTableSize = activity.tableSize;
+                                    const info = OPERATION_INFO[activity.operation];
+                                    const isAddSub = activity.operation === "suma" || activity.operation === "resta";
+                                    const isMultDiv = !isAddSub;
+                                    const activeOperandCount = operandCount;
+                                    const titleSizeClass = "text-[4rem]";
+                                    const titleWrapClass = "min-w-[20rem] px-[3.2rem] py-[1rem]";
+                                    const boxSize = activeOperandCount > 2 ? "w-[6.6rem] h-[6.6rem] text-[3rem]" : "w-[8.8rem] h-[8.8rem] text-[3.8rem]";
+                                    const symSize = activeOperandCount > 2 ? "text-[3.2rem]" : "text-[4.2rem]";
+                                    const equationGapClass = "gap-4";
+                                    const sectionPaddingClass = "p-[1.6rem]";
+                                    const headerMarginClass = "mb-4";
+                                    const equationPaddingClass = "py-3";
+                                    const gridTopPaddingClass = "pt-3";
+                                    const gridWrapClass = "grid gap-3 justify-center items-start w-full";
+                                    const gridMinWidthPx = getDotGridWidthPx(activity.dotCols, activity.dotSize);
+                                    const gridWrapStyle = {
+                                        gridTemplateColumns: `repeat(auto-fit, minmax(${gridMinWidthPx}px, max-content))`,
+                                    };
+                                    const effectiveDotSize = activity.dotSize;
+                                    const effectiveAxisIconSize = activity.axisIconSize;
+                                    const effectiveTableSize = activity.tableSize;
 
-                        return (
-                            <section
-                                key={activity.id}
-                                data-activity-section="true"
-                                className={`rounded-2xl flex flex-col justify-start items-stretch ${sectionPaddingClass}`}
-                                style={{
-                                    borderWidth: activity.showSheetBorder ? "0.4rem" : "0",
-                                    borderStyle: "solid",
-                                    borderColor: activity.sheetBorderColor || info.accent,
-                                    backgroundColor: "#ffffff",
-                                }}
-                            >
-                                <div className={`flex justify-center ${headerMarginClass}`}>
-                                    <div data-export-title-wrap="true" className={`flex items-center justify-center border-[0.3rem] border-gray-800 rounded-[1.6rem] text-center ${titleWrapClass}`}>
-                                        <p data-export-title="true" className={`flex items-center justify-center font-display ${titleSizeClass} font-black tracking-wide leading-none text-gray-900`}>
-                                            {info.label}
-                                        </p>
-                                    </div>
-                                </div>
+                                    return (
+                                        <section
+                                            key={activity.id}
+                                            data-activity-section="true"
+                                            className={`rounded-2xl flex flex-col justify-start items-stretch ${sectionPaddingClass}`}
+                                            style={{
+                                                borderWidth: activity.showSheetBorder ? "0.4rem" : "0",
+                                                borderStyle: "solid",
+                                                borderColor: activity.sheetBorderColor || info.accent,
+                                                backgroundColor: "#ffffff",
+                                            }}
+                                        >
+                                            <div className={`flex justify-center ${headerMarginClass}`}>
+                                                <div data-export-title-wrap="true" className={`flex items-center justify-center border-[0.3rem] border-gray-800 rounded-[1.6rem] text-center ${titleWrapClass}`}>
+                                                    <p data-export-title="true" className={`flex items-center justify-center font-display ${titleSizeClass} font-black tracking-wide leading-none text-gray-900`}>
+                                                        {info.label}
+                                                    </p>
+                                                </div>
+                                            </div>
 
-                                <div className={`flex items-center justify-center ${equationGapClass} flex-wrap ${equationPaddingClass}`}>
-                                    {Array.from({ length: activeOperandCount }).map((_, i) => (
-                                        <span key={`${activity.id}-${i}`} className={`flex items-center ${equationGapClass}`}>
-                                            {i > 0 && <span data-export-symbol-wrap="true" className="inline-flex items-center justify-center"><span data-export-symbol="true" className={`inline-flex items-center justify-center leading-none ${symSize} font-bold text-gray-800`}>{info.symbol}</span></span>}
-                                            <span className={`${boxSize} border-[0.5rem] border-gray-800 rounded-[1.6rem] bg-white font-bold text-gray-900 flex items-center justify-center shadow-sm`}>{activity.operandValues[i] || ""}</span>
-                                        </span>
-                                    ))}
-                                    <span data-export-symbol-wrap="true" className="inline-flex items-center justify-center"><span data-export-symbol="true" className={`inline-flex items-center justify-center leading-none ${symSize} font-bold text-gray-800`}>=</span></span>
-                                    <span className={`${boxSize} border-[0.5rem] border-gray-800 rounded-[1.6rem] bg-white shadow-sm`} />
-                                </div>
+                                            <div className={`flex items-center justify-center ${equationGapClass} flex-wrap ${equationPaddingClass}`}>
+                                                {Array.from({ length: activeOperandCount }).map((_, i) => (
+                                                    <span key={`${activity.id}-${i}`} className={`flex items-center ${equationGapClass}`}>
+                                                        {i > 0 && (
+                                                            <span data-export-symbol-wrap="true" className="inline-flex items-center justify-center">
+                                                                <span data-export-symbol="true" className={`inline-flex items-center justify-center leading-none ${symSize} font-bold text-gray-800`}>
+                                                                    {info.symbol}
+                                                                </span>
+                                                            </span>
+                                                        )}
+                                                        <span className={`${boxSize} border-[0.5rem] border-gray-800 rounded-[1.6rem] bg-white font-bold text-gray-900 flex items-center justify-center shadow-sm`}>{activity.operandValues[i] || ""}</span>
+                                                    </span>
+                                                ))}
+                                                <span data-export-symbol-wrap="true" className="inline-flex items-center justify-center">
+                                                    <span data-export-symbol="true" className={`inline-flex items-center justify-center leading-none ${symSize} font-bold text-gray-800`}>
+                                                        =
+                                                    </span>
+                                                </span>
+                                                <span className={`${boxSize} border-[0.5rem] border-gray-800 rounded-[1.6rem] bg-white shadow-sm`} />
+                                            </div>
 
-                                <div className={`${gridTopPaddingClass} flex flex-col`}>
-                                    {isAddSub && activity.gridLayout === "double" && (
-                                        <div className={gridWrapClass} style={gridWrapStyle}>
-                                            {Array.from({ length: activeOperandCount }).map((_, i) => (
-                                                <DotGrid key={`${activity.id}-grid-${i}`} rows={activity.dotRows} cols={activity.dotCols} dotSize={effectiveDotSize} />
-                                            ))}
-                                        </div>
-                                    )}
+                                            <div className={`${gridTopPaddingClass} flex flex-col`}>
+                                                {isAddSub && activity.gridLayout === "double" && (
+                                                    <div className={gridWrapClass} style={gridWrapStyle}>
+                                                        {Array.from({ length: activeOperandCount }).map((_, i) => (
+                                                            <DotGrid key={`${activity.id}-grid-${i}`} rows={activity.dotRows} cols={activity.dotCols} dotSize={effectiveDotSize} />
+                                                        ))}
+                                                    </div>
+                                                )}
 
-                                    {isAddSub && activity.gridLayout === "single" && (
-                                        <div className="flex justify-center w-full">
-                                            <DotGrid rows={activity.dotRows} cols={activity.dotCols} dotSize={effectiveDotSize} />
-                                        </div>
-                                    )}
+                                                {isAddSub && activity.gridLayout === "single" && (
+                                                    <div className="flex justify-center w-full">
+                                                        <DotGrid rows={activity.dotRows} cols={activity.dotCols} dotSize={effectiveDotSize} />
+                                                    </div>
+                                                )}
 
-                                    {isMultDiv && <DotGrid type="table" tableSize={effectiveTableSize} dotSize={effectiveDotSize} xAxisIcon={activity.xAxisIcon} yAxisIcon={activity.yAxisIcon} axisIconSize={effectiveAxisIconSize} showAxisNumbers={activity.showAxisNumbers} fillSpace />}
-                                </div>
-                            </section>
-                                );
-                            })}
+                                                {isMultDiv && <DotGrid type="table" tableSize={effectiveTableSize} dotSize={effectiveDotSize} xAxisIcon={activity.xAxisIcon} yAxisIcon={activity.yAxisIcon} axisIconSize={effectiveAxisIconSize} showAxisNumbers={activity.showAxisNumbers} savedSvgItems={savedSvgItems} fillSpace />}
+                                            </div>
+                                        </section>
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>

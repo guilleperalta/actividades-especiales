@@ -1,5 +1,8 @@
 export const SVG_LIBRARY_STORAGE_KEY = "activity-gen-saved-axis-images";
 export const SAVED_ICON_PREFIX = "saved:";
+const LIBRARY_ITEMS_API_URL = "/api/library/items";
+const LIBRARY_ICONIFY_API_URL = "/api/library/iconify";
+const LIBRARY_MIGRATE_API_URL = "/api/library/migrate";
 
 export const SVG_LIBRARY_CATALOG = [
     { value: "child", label: "Niño", category: "Personas", keywords: ["nene", "chico", "persona", "infancia"] },
@@ -85,6 +88,40 @@ export function persistSavedSvgItems(items) {
     window.localStorage.setItem(SVG_LIBRARY_STORAGE_KEY, JSON.stringify(items));
 }
 
+export async function fetchSavedSvgItems() {
+    const response = await fetch(LIBRARY_ITEMS_API_URL);
+
+    if (!response.ok) {
+        throw new Error("Could not load the saved image library.");
+    }
+
+    const payload = await response.json();
+    return Array.isArray(payload) ? payload : [];
+}
+
+export async function migrateLegacySavedSvgItems() {
+    const legacyItems = loadSavedSvgItems();
+
+    if (legacyItems.length === 0) {
+        return fetchSavedSvgItems();
+    }
+
+    const response = await fetch(LIBRARY_MIGRATE_API_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ items: legacyItems }),
+    });
+
+    if (!response.ok) {
+        throw new Error("Could not migrate the saved image library.");
+    }
+
+    const payload = await response.json();
+    return Array.isArray(payload) ? payload : [];
+}
+
 export function saveSvgItem(name, iconValue) {
     const trimmedName = name.trim();
     const nextItem = {
@@ -113,23 +150,56 @@ export function saveRemoteSvgItem({ name, imageUrl, thumbnailUrl = "", sourceUrl
     return nextItem;
 }
 
-export function saveIconifyItem({ name, iconName }) {
-    const trimmedName = name.trim();
-    const nextItem = {
-        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`,
-        name: trimmedName,
-        sourceType: "iconify",
-        iconName,
-    };
-    const nextItems = [nextItem, ...loadSavedSvgItems()];
-    persistSavedSvgItems(nextItems);
-    return nextItem;
+export async function saveIconifyItem({ name, iconName }) {
+    const response = await fetch(LIBRARY_ICONIFY_API_URL, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            name: name.trim(),
+            iconName,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error("Could not save the selected icon.");
+    }
+
+    return response.json();
 }
 
-export function removeSavedSvgItem(id) {
-    const nextItems = loadSavedSvgItems().filter((item) => item.id !== id);
-    persistSavedSvgItems(nextItems);
-    return nextItems;
+export async function waitForSavedImageAvailability(imageUrl, timeoutMs = 4000) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+        try {
+            const probeUrl = `${imageUrl}${imageUrl.includes("?") ? "&" : "?"}t=${Date.now()}`;
+            const response = await fetch(probeUrl, {
+                cache: "no-store",
+            });
+
+            if (response.ok) {
+                return true;
+            }
+        } catch {
+            // Keep polling until timeout.
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 160));
+    }
+
+    return false;
+}
+
+export async function removeSavedSvgItem(id) {
+    const response = await fetch(`${LIBRARY_ITEMS_API_URL}/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+    });
+
+    if (!response.ok) {
+        throw new Error("Could not remove the saved image.");
+    }
 }
 
 export function resolveSvgLibraryValue(iconReference, savedItems = loadSavedSvgItems()) {
@@ -159,6 +229,17 @@ export function resolveAxisGraphic(iconReference, savedItems = loadSavedSvgItems
             return {
                 type: "library",
                 value: DEFAULT_AXIS_ICON,
+            };
+        }
+
+        if (savedItem.sourceType === "local-file" && savedItem.imageUrl) {
+            const immediateImageUrl = savedItem.inlineSvgDataUrl || `${savedItem.imageUrl}?v=${savedItem.id}`;
+            const immediateThumbnailUrl = savedItem.inlineSvgDataUrl || `${savedItem.thumbnailUrl || savedItem.imageUrl}?v=${savedItem.id}`;
+            return {
+                type: savedItem.inlineSvgMarkup ? "inline-svg" : "image",
+                value: immediateImageUrl,
+                thumbnailUrl: immediateThumbnailUrl,
+                markup: savedItem.inlineSvgMarkup || "",
             };
         }
 

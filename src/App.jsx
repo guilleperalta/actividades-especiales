@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { fetchSavedSvgItems, migrateLegacySavedSvgItems } from "./data/svgLibrary";
 import { useActivityConfig } from "./hooks/useActivityConfig";
 import { ControlPanel } from "./components/ControlPanel";
 import { ActivitySheet } from "./components/ActivitySheet";
@@ -9,6 +10,7 @@ export default function App() {
     const previewRef = useRef(null);
     const exportSheetRef = useRef(null);
     const [zoom, setZoom] = useState(70);
+    const [savedSvgItems, setSavedSvgItems] = useState([]);
     const { activities, config, activeActivityIndex, setActiveActivityIndex, update, updateOperation, updateOperand, addActivity, removeActivity, isAddSub, isMultDiv, activeOperandCount, getOperandCount, moveActivity } = useActivityConfig();
 
     const PREVIEW_VERTICAL_PADDING = 20;
@@ -28,6 +30,54 @@ export default function App() {
         window.addEventListener("resize", fitToHeight);
         return () => window.removeEventListener("resize", fitToHeight);
     }, []);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadSavedItems = async () => {
+            try {
+                const serverItems = await fetchSavedSvgItems();
+                const nextItems = serverItems.length > 0 ? serverItems : await migrateLegacySavedSvgItems();
+
+                if (isMounted) {
+                    setSavedSvgItems(nextItems);
+                }
+            } catch {
+                if (isMounted) {
+                    setSavedSvgItems([]);
+                }
+            }
+        };
+
+        void loadSavedItems();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
+    const refreshSavedSvgItems = async (nextItem = null, removedItemId = "") => {
+        if (nextItem) {
+            setSavedSvgItems((currentItems) => {
+                const filteredItems = currentItems.filter((item) => item.id !== nextItem.id);
+                return [nextItem, ...filteredItems];
+            });
+            return [nextItem, ...savedSvgItems.filter((item) => item.id !== nextItem.id)];
+        }
+
+        if (removedItemId) {
+            setSavedSvgItems((currentItems) => currentItems.filter((item) => item.id !== removedItemId));
+        }
+
+        try {
+            const nextItems = await fetchSavedSvgItems();
+            setSavedSvgItems(nextItems);
+            return nextItems;
+        } catch {
+            setSavedSvgItems([]);
+            return [];
+        }
+    };
 
     const getEmbeddedFontCss = async () => {
         const fontLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).filter((node) => node.href.includes("fonts.googleapis.com"));
@@ -178,7 +228,6 @@ export default function App() {
         `;
     };
 
-
     const handlePrint = async () => {
         if (!exportSheetRef.current) return;
         const embeddedFontCss = await getEmbeddedFontCss();
@@ -236,8 +285,7 @@ export default function App() {
             for (let i = 0; i < sourcePages.length; i++) {
                 currentFrame = document.createElement("iframe");
                 currentFrame.setAttribute("aria-hidden", "true");
-                currentFrame.style.cssText =
-                    "position:fixed;left:-200000px;top:0;width:794px;height:1123px;border:0;opacity:0;pointer-events:none;";
+                currentFrame.style.cssText = "position:fixed;left:-200000px;top:0;width:794px;height:1123px;border:0;opacity:0;pointer-events:none;";
                 document.body.appendChild(currentFrame);
 
                 const frameDoc = currentFrame.contentDocument;
@@ -255,19 +303,22 @@ export default function App() {
                 if (frameDoc.fonts?.ready) await frameDoc.fonts.ready;
 
                 await Promise.all(
-                    Array.from(frameDoc.querySelectorAll("img")).map(
-                        (img) =>
-                            img.complete
-                                ? Promise.resolve()
-                                : new Promise((res) => {
-                                      img.onload = res;
-                                      img.onerror = res;
-                                  }),
+                    Array.from(frameDoc.querySelectorAll("img")).map((img) =>
+                        img.complete
+                            ? Promise.resolve()
+                            : new Promise((res) => {
+                                  img.onload = res;
+                                  img.onerror = res;
+                              }),
                     ),
                 );
 
                 const pageEl = frameDoc.querySelector(".sheet-a4");
-                if (!pageEl) { document.body.removeChild(currentFrame); currentFrame = null; continue; }
+                if (!pageEl) {
+                    document.body.removeChild(currentFrame);
+                    currentFrame = null;
+                    continue;
+                }
 
                 const canvas = await html2canvas(pageEl, {
                     scale: 3,
@@ -287,24 +338,36 @@ export default function App() {
                         clonedDoc.querySelectorAll("[data-export-title='true']").forEach((title) => {
                             title.style.margin = "0";
                             title.style.lineHeight = "1";
-                            title.style.transform = "translateY(-0.2em)";
+                            title.style.position = "absolute";
+                            title.style.left = "50%";
+                            title.style.top = "50%";
+                            title.style.width = "100%";
+                            title.style.textAlign = "center";
+                            title.style.transform = "translate(-50%, -58%)";
                             title.style.transformOrigin = "center center";
                         });
                         clonedDoc.querySelectorAll("[data-export-title-wrap='true']").forEach((wrapper) => {
                             wrapper.style.display = "flex";
                             wrapper.style.alignItems = "center";
                             wrapper.style.justifyContent = "center";
+                            wrapper.style.position = "relative";
                         });
                         clonedDoc.querySelectorAll("[data-export-symbol='true']").forEach((symbol) => {
                             symbol.style.margin = "0";
                             symbol.style.lineHeight = "1";
-                            symbol.style.transform = "translateY(-0.14em)";
+                            symbol.style.position = "absolute";
+                            symbol.style.left = "50%";
+                            symbol.style.top = "50%";
+                            symbol.style.transform = "translate(-50%, -56%)";
                             symbol.style.transformOrigin = "center center";
                         });
                         clonedDoc.querySelectorAll("[data-export-symbol-wrap='true']").forEach((wrapper) => {
                             wrapper.style.display = "inline-flex";
                             wrapper.style.alignItems = "center";
                             wrapper.style.justifyContent = "center";
+                            wrapper.style.position = "relative";
+                            wrapper.style.minWidth = "1em";
+                            wrapper.style.minHeight = "1em";
                         });
                     },
                 });
@@ -329,11 +392,10 @@ export default function App() {
         }
     };
 
-
     return (
         <div className="app-layout flex h-screen overflow-hidden bg-slate-950">
             <div className="flex-[0_0_33.333%] max-w-[33.333%] min-w-[320px] h-full">
-                <ControlPanel activities={activities} config={config} activeActivityIndex={activeActivityIndex} onSelectActivity={setActiveActivityIndex} onAddActivity={addActivity} onRemoveActivity={removeActivity} onMoveActivity={moveActivity} update={update} updateOperation={updateOperation} updateOperand={updateOperand} isAddSub={isAddSub} isMultDiv={isMultDiv} activeOperandCount={activeOperandCount} onPrint={handlePrint} onExport={handleExport} zoom={zoom} onZoomChange={setZoom} onFitHeight={fitToHeight} />
+                <ControlPanel activities={activities} config={config} activeActivityIndex={activeActivityIndex} onSelectActivity={setActiveActivityIndex} onAddActivity={addActivity} onRemoveActivity={removeActivity} onMoveActivity={moveActivity} update={update} updateOperation={updateOperation} updateOperand={updateOperand} isAddSub={isAddSub} isMultDiv={isMultDiv} activeOperandCount={activeOperandCount} onPrint={handlePrint} onExport={handleExport} zoom={zoom} onZoomChange={setZoom} onFitHeight={fitToHeight} savedSvgItems={savedSvgItems} onSavedItemsChange={refreshSavedSvgItems} />
             </div>
             <main ref={previewRef} className="app-preview flex-1 overflow-auto flex items-start justify-center py-3 px-6 bg-[radial-gradient(circle_at_top,_rgba(236,72,153,0.16),_transparent_28%),linear-gradient(180deg,_#020617_0%,_#111827_100%)]">
                 <div className="preview-stage flex items-start justify-center w-full py-4">
@@ -347,14 +409,14 @@ export default function App() {
                             width: "fit-content",
                         }}
                     >
-                        <ActivitySheet ref={sheetRef} activities={activities} getOperandCount={getOperandCount} />
+                        <ActivitySheet ref={sheetRef} activities={activities} getOperandCount={getOperandCount} savedSvgItems={savedSvgItems} />
                     </div>
                 </div>
             </main>
 
             {createPortal(
                 <div className="export-sheet-host" aria-hidden="true">
-                    <ActivitySheet ref={exportSheetRef} activities={activities} getOperandCount={getOperandCount} />
+                    <ActivitySheet ref={exportSheetRef} activities={activities} getOperandCount={getOperandCount} savedSvgItems={savedSvgItems} />
                 </div>,
                 document.body,
             )}

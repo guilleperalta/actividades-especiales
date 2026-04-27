@@ -18,6 +18,7 @@ export function DotGrid({
     yAxisIcon = "child",
     axisIconSize = 25,
     showAxisNumbers = true,
+    savedSvgItems = [],
     fillSpace = false,
     expandContainer = false,
 }) {
@@ -31,6 +32,7 @@ export function DotGrid({
                 yAxisIcon={yAxisIcon}
                 axisIconSize={axisIconSize}
                 showAxisNumbers={showAxisNumbers}
+                savedSvgItems={savedSvgItems}
                 fillSpace={fillSpace}
             />
         );
@@ -73,14 +75,14 @@ export function DotGrid({
     );
 }
 
-function TableGrid({ size, dotSize, itemType, xAxisIcon, yAxisIcon, axisIconSize, showAxisNumbers, fillSpace }) {
+function TableGrid({ size, dotSize, itemType, xAxisIcon, yAxisIcon, axisIconSize, showAxisNumbers, savedSvgItems, fillSpace }) {
     const safeSize = Math.max(2, Math.min(12, size));
     const dotRem = Math.max(1, dotSize / 10);
     const cellSizeRem = Math.max(4.6, dotRem + 2.2);
     const headerCellSizeRem = Math.max(cellSizeRem, axisIconSize / 10 + 2.1);
     const tableClassName = fillSpace ? "h-full w-full" : "w-full";
-    const resolvedXAxisIcon = resolveAxisGraphic(xAxisIcon);
-    const resolvedYAxisIcon = resolveAxisGraphic(yAxisIcon);
+    const resolvedXAxisIcon = resolveAxisGraphic(xAxisIcon, savedSvgItems);
+    const resolvedYAxisIcon = resolveAxisGraphic(yAxisIcon, savedSvgItems);
 
     const renderAxisCell = (graphic, index) => {
         const axisNumber = index + 1;

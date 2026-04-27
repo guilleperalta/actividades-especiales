@@ -1,89 +1,95 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-    createSavedIconReference,
-    removeSavedSvgItem,
-    resolveAxisGraphic,
-    saveIconifyItem,
-    searchSvgLibrary,
-} from "../data/svgLibrary";
+import { createSavedIconReference, removeSavedSvgItem, resolveAxisGraphic, saveIconifyItem, searchSvgLibrary } from "../data/svgLibrary";
 import { AxisGraphic } from "./AxisGraphic";
 
 const ICONIFY_SEARCH_API_URL = "https://api.iconify.design/search";
+const MY_MEMORY_TRANSLATE_API_URL = "https://api.mymemory.translated.net/get";
+const DATAMUSE_RELATED_API_URL = "https://api.datamuse.com/words";
+const ONLINE_TRANSLATION_TIMEOUT_MS = 1200;
+const MAX_REMOTE_RESULTS = 40;
 
-const ICONIFY_QUERY_ALIASES = {
-    nena: "girl child",
-    nene: "boy child",
-    nino: "child",
-    niño: "child",
-    nina: "girl",
-    niña: "girl",
-    mujer: "woman",
-    hombre: "man",
-    persona: "person",
-    perro: "dog",
-    gato: "cat",
-    conejo: "rabbit",
-    pajaro: "bird",
-    pájaro: "bird",
-    vaca: "cow",
-    caballo: "horse",
-    manzana: "apple",
-    banana: "banana",
-    pera: "pear",
-    uva: "grapes",
-    uvas: "grapes",
-    frutilla: "strawberry",
-    sandia: "watermelon",
-    sandía: "watermelon",
-    mandarina: "tangerine orange",
-    zanahoria: "carrot",
-    brocoli: "broccoli",
-    brócoli: "broccoli",
-    maiz: "corn",
-    maíz: "corn",
-    tomate: "tomato",
-    morron: "pepper",
-    morrón: "pepper",
-    papa: "potato",
-    mochila: "backpack",
-    lapiz: "pencil",
-    lápiz: "pencil",
-    libro: "book",
-    globo: "balloon",
-    barrilete: "kite",
-    rompecabezas: "puzzle",
-    pintura: "palette paint",
-    colectivo: "bus",
-    bondi: "bus",
-    auto: "car",
-    camioneta: "truck pickup",
-    bici: "bicycle",
-    bicicleta: "bicycle",
-    tren: "train",
-    avion: "airplane",
-    avión: "airplane",
-    tractor: "tractor",
-    mate: "mate cup",
-    pelota: "ball soccer",
-};
+async function fetchEnglishTranslations(searchValue, signal) {
+    const params = new URLSearchParams({
+        q: searchValue.trim(),
+        langpair: "es|en",
+    });
+    const response = await fetch(`${MY_MEMORY_TRANSLATE_API_URL}?${params.toString()}`, {
+        signal,
+    });
 
-const ICONIFY_ALLOWED_PREFIXES = [
-    "fluent-emoji-flat",
-    "openmoji",
-    "noto-v1",
-    "twemoji",
-    "emojione-v1",
-    "streamline-emojis",
-    "fxemoji",
-    "icon-park-twotone",
-    "flat-color-icons",
-    "solar",
-    "mdi",
-    "tabler",
-    "ph",
-    "lucide",
-    "iconoir",
-];
+    if (!response.ok) {
+        throw new Error("No se pudo traducir el término de búsqueda.");
+    }
+
+    const payload = await response.json();
+    const translatedText = typeof payload?.responseData?.translatedText === "string" ? payload.responseData.translatedText.trim() : "";
+    const alternativeTranslations = Array.isArray(payload?.matches)
+        ? payload.matches.map((match) => (typeof match?.translation === "string" ? match.translation.trim() : "")).filter(Boolean)
+        : [];
+
+    return Array.from(new Set([translatedText, ...alternativeTranslations])).filter(Boolean);
+}
+
+async function fetchRelatedTerms(searchValue, signal) {
+    const params = new URLSearchParams({
+        ml: searchValue.trim(),
+        max: "12",
+    });
+    const response = await fetch(`${DATAMUSE_RELATED_API_URL}?${params.toString()}`, {
+        signal,
+    });
+
+    if (!response.ok) {
+        throw new Error("No se pudieron obtener términos relacionados.");
+    }
+
+    const payload = await response.json();
+    return Array.isArray(payload) ? payload.map((item) => (typeof item?.word === "string" ? item.word.trim() : "")).filter(Boolean) : [];
+}
+
+function buildRemoteQueries(searchValue, translatedTerms = []) {
+    const normalizedSearch = searchValue.trim().toLowerCase();
+    const tokens = normalizedSearch.split(/\s+/).filter(Boolean);
+    const onlineTranslatedTokens = translatedTerms.flatMap((term) => term.toLowerCase().split(/\s+/).filter(Boolean));
+
+    return Array.from(new Set([normalizedSearch, ...tokens, ...onlineTranslatedTokens])).filter(Boolean);
+}
+
+async function searchIconifyQueries(queries, signal) {
+    const payloads = await Promise.all(
+        queries.map(async (query) => {
+            const params = new URLSearchParams({
+                query,
+                limit: "24",
+            });
+            const response = await fetch(`${ICONIFY_SEARCH_API_URL}?${params.toString()}`, {
+                signal,
+            });
+
+            if (!response.ok) {
+                throw new Error("No se pudo buscar en el repositorio de iconos.");
+            }
+
+            return response.json();
+        }),
+    );
+
+    return payloads.flatMap((payload) => payload.icons ?? []).filter((iconName, index, allIcons) => allIcons.indexOf(iconName) === index);
+}
+
+function mergeUniqueStrings(currentItems, nextItems) {
+    return [...currentItems, ...nextItems].filter((item, index, allItems) => allItems.indexOf(item) === index);
+}
+
+function mapRemoteResults(iconNames) {
+    return iconNames
+        .slice(0, MAX_REMOTE_RESULTS)
+        .map((iconName) => ({
+            id: iconName,
+            iconName,
+            label: iconName.split(":")[1].replace(/[-_]+/g, " "),
+        }));
+}
 
 /**
  * SvgPickerModal
@@ -118,29 +124,36 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
             setRemoteError("");
 
             try {
-                const normalizedTerm = searchTerm.trim().toLowerCase();
-                const remoteQuery = ICONIFY_QUERY_ALIASES[normalizedTerm] ?? searchTerm.trim();
-                const params = new URLSearchParams({
-                    query: remoteQuery,
-                    limit: "30",
-                });
-                const response = await fetch(`${ICONIFY_SEARCH_API_URL}?${params.toString()}`, {
-                    signal: controller.signal,
-                });
+                const baseQueries = buildRemoteQueries(searchTerm);
+                const baseIcons = await searchIconifyQueries(baseQueries, controller.signal);
+                const baseResults = mapRemoteResults(baseIcons);
+                setRemoteResults(baseResults);
 
-                if (!response.ok) {
-                    throw new Error("No se pudo buscar en el repositorio de iconos.");
+                const translatedTerms = await Promise.race([fetchEnglishTranslations(searchTerm, controller.signal), new Promise((resolve) => window.setTimeout(() => resolve([]), ONLINE_TRANSLATION_TIMEOUT_MS))]).catch(() => []);
+                const translatedQueries = buildRemoteQueries(searchTerm, translatedTerms).filter((query) => !baseQueries.includes(query));
+                let mergedIcons = baseIcons;
+
+                if (translatedQueries.length > 0) {
+                    const translatedIcons = await searchIconifyQueries(translatedQueries, controller.signal);
+                    mergedIcons = mergeUniqueStrings(mergedIcons, translatedIcons);
+                    setRemoteResults(mapRemoteResults(mergedIcons));
                 }
 
-                const payload = await response.json();
-                const nextResults = (payload.icons ?? [])
-                    .filter((iconName) => ICONIFY_ALLOWED_PREFIXES.some((prefix) => iconName.startsWith(`${prefix}:`)))
-                    .slice(0, 20)
-                    .map((iconName) => ({
-                        id: iconName,
-                        iconName,
-                        label: iconName.split(":")[1].replace(/[-_]+/g, " "),
-                    }));
+                const semanticSeeds = mergeUniqueStrings(translatedTerms, baseQueries);
+                const relatedTermGroups = await Promise.all(
+                    semanticSeeds.map((term) =>
+                        Promise.race([fetchRelatedTerms(term, controller.signal), new Promise((resolve) => window.setTimeout(() => resolve([]), ONLINE_TRANSLATION_TIMEOUT_MS))]).catch(() => []),
+                    ),
+                );
+                const relatedTerms = mergeUniqueStrings([], relatedTermGroups.flat());
+                const relatedQueries = buildRemoteQueries(searchTerm, [...translatedTerms, ...relatedTerms]).filter((query) => !baseQueries.includes(query) && !translatedQueries.includes(query));
+
+                if (relatedQueries.length > 0) {
+                    const relatedIcons = await searchIconifyQueries(relatedQueries, controller.signal);
+                    mergedIcons = mergeUniqueStrings(mergedIcons, relatedIcons);
+                }
+
+                const nextResults = mapRemoteResults(mergedIcons);
 
                 setRemoteResults(nextResults);
                 if (nextResults.length === 0) {
@@ -182,22 +195,26 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
     };
 
     const handleRemoveSaved = (id) => {
-        removeSavedSvgItem(id);
-        onSavedItemsChange();
+        void (async () => {
+            await removeSavedSvgItem(id);
+            await onSavedItemsChange(null, id);
+        })();
     };
 
     const handleSaveRemote = () => {
-        if (!pendingRemoteIcon || !draftName.trim()) {
-            return;
-        }
+        void (async () => {
+            if (!pendingRemoteIcon || !draftName.trim()) {
+                return;
+            }
 
-        const savedItem = saveIconifyItem({
-            name: draftName.trim(),
-            iconName: pendingRemoteIcon.iconName,
-        });
+            const savedItem = await saveIconifyItem({
+                name: draftName.trim(),
+                iconName: pendingRemoteIcon.iconName,
+            });
 
-        onSavedItemsChange();
-        onSelect(createSavedIconReference(savedItem.id));
+            await onSavedItemsChange(savedItem);
+            onSelect(createSavedIconReference(savedItem.id));
+        })();
     };
 
     return (
@@ -218,13 +235,7 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
                         <div className="border-b border-slate-800 px-6 py-4">
                             <label className="block">
                                 <span className="mb-2 block text-[1.25rem] font-bold uppercase tracking-[0.18em] text-slate-500">Buscar icono</span>
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={(event) => setSearchTerm(event.target.value)}
-                                    placeholder="Ej.: manzana, nena, colectivo, perro..."
-                                    className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-[1.45rem] text-slate-100 outline-none transition-colors placeholder:text-slate-500 focus:border-pink-400"
-                                />
+                                <input type="text" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Ej.: manzana, nena, colectivo, perro..." className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-[1.45rem] text-slate-100 outline-none transition-colors placeholder:text-slate-500 focus:border-pink-400" />
                             </label>
                         </div>
 
@@ -238,13 +249,8 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
                                     {remoteError && <p className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-[1.2rem] text-amber-100">{remoteError}</p>}
                                     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                                         {remoteResults.map((item) => (
-                                            <button
-                                                key={item.id}
-                                                type="button"
-                                                onClick={() => setPendingRemoteIcon(item)}
-                                                className={`rounded-2xl border p-3 transition-colors ${pendingRemoteIcon?.id === item.id ? "border-cyan-400 bg-cyan-500/10" : "border-slate-700 bg-slate-800/80 hover:bg-slate-800"}`}
-                                            >
-                                                <div className="flex h-24 items-center justify-center rounded-2xl bg-slate-950/60">
+                                            <button key={item.id} type="button" onClick={() => setPendingRemoteIcon(item)} className={`rounded-2xl border p-3 transition-colors ${pendingRemoteIcon?.id === item.id ? "border-cyan-400 bg-cyan-500/10" : "border-slate-700 bg-slate-800/80 hover:bg-slate-800"}`}>
+                                                <div className="flex h-24 items-center justify-center">
                                                     <AxisGraphic graphic={{ type: "iconify", value: item.iconName }} size={64} />
                                                 </div>
                                             </button>
@@ -268,7 +274,7 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
                                             return (
                                                 <div key={item.id} className={`rounded-2xl border p-3 transition-colors ${isSelected ? "border-pink-400 bg-pink-500/10" : "border-slate-700 bg-slate-800/80 hover:bg-slate-800"}`}>
                                                     <button type="button" onClick={() => handleLocalSelect(itemReference)} className="flex w-full items-center justify-center">
-                                                        <div className="flex h-24 w-full items-center justify-center rounded-2xl bg-slate-950/60">
+                                                        <div className="flex h-24 w-full items-center justify-center">
                                                             <AxisGraphic graphic={itemGraphic} size={64} />
                                                         </div>
                                                     </button>
@@ -289,13 +295,8 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
                                         <h4 className="mb-3 text-[1.2rem] font-bold uppercase tracking-[0.16em] text-slate-600">{category}</h4>
                                         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                                             {items.map((item) => (
-                                                <button
-                                                    key={item.value}
-                                                    type="button"
-                                                    onClick={() => handleLocalSelect(item.value)}
-                                                    className={`rounded-2xl border p-3 transition-colors ${selectedIcon === item.value ? "border-pink-400 bg-pink-500/10" : "border-slate-700 bg-slate-800/80 hover:bg-slate-800"}`}
-                                                >
-                                                    <div className="flex h-24 items-center justify-center rounded-2xl bg-slate-950/60">
+                                                <button key={item.value} type="button" onClick={() => handleLocalSelect(item.value)} className={`rounded-2xl border p-3 transition-colors ${selectedIcon === item.value ? "border-pink-400 bg-pink-500/10" : "border-slate-700 bg-slate-800/80 hover:bg-slate-800"}`}>
+                                                    <div className="flex h-24 items-center justify-center">
                                                         <AxisGraphic graphic={{ type: "library", value: item.value }} size={66} />
                                                     </div>
                                                 </button>
@@ -313,27 +314,14 @@ export function SvgPickerModal({ title, selectedIcon, savedItems, onSelect, onSa
                         </div>
 
                         <div className="flex flex-1 flex-col px-6 py-5">
-                            <div className="flex flex-1 items-center justify-center rounded-[2rem] border border-slate-800 bg-slate-950/60 p-4">
-                                {pendingGraphic ? <AxisGraphic graphic={pendingGraphic} size={132} /> : <span className="text-center text-[1.4rem] text-slate-500">Elegí un icono del repositorio para guardarlo.</span>}
-                            </div>
+                            <div className="flex flex-1 items-center justify-center rounded-[2rem] border border-slate-800 p-4">{pendingGraphic ? <AxisGraphic graphic={pendingGraphic} size={132} /> : <span className="text-center text-[1.4rem] text-slate-500">Elegí un icono del repositorio para guardarlo.</span>}</div>
 
                             <div className="mt-5 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
                                 <label className="block">
                                     <span className="mb-2 block text-[1.2rem] font-bold uppercase tracking-[0.18em] text-slate-500">Nombre para guardar</span>
-                                    <input
-                                        type="text"
-                                        value={draftName}
-                                        onChange={(event) => setDraftName(event.target.value)}
-                                        placeholder="Ej.: Nena con mochila"
-                                        className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-[1.4rem] text-slate-100 outline-none transition-colors placeholder:text-slate-500 focus:border-pink-400"
-                                    />
+                                    <input type="text" value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Ej.: Nena con mochila" className="w-full rounded-xl border border-slate-700 bg-slate-800 px-4 py-3 text-[1.4rem] text-slate-100 outline-none transition-colors placeholder:text-slate-500 focus:border-pink-400" />
                                 </label>
-                                <button
-                                    type="button"
-                                    onClick={handleSaveRemote}
-                                    disabled={!pendingRemoteIcon || !draftName.trim()}
-                                    className="mt-4 w-full rounded-xl bg-pink-500 px-4 py-3 text-[1.35rem] font-bold text-white transition-colors hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-40"
-                                >
+                                <button type="button" onClick={handleSaveRemote} disabled={!pendingRemoteIcon || !draftName.trim()} className="mt-4 w-full rounded-xl bg-pink-500 px-4 py-3 text-[1.35rem] font-bold text-white transition-colors hover:bg-pink-600 disabled:cursor-not-allowed disabled:opacity-40">
                                     Guardar en mi biblioteca y usar
                                 </button>
                             </div>
